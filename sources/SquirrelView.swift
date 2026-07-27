@@ -217,7 +217,7 @@ final class SquirrelView: NSView {
     }
 
     NSBezierPath.defaultLineWidth = 0
-    backgroundPath = drawSmoothLines(rectVertex(of: backgroundRect), straightCorner: Set(), alpha: 0.3 * theme.cornerRadius, beta: 1.4 * theme.cornerRadius)
+    backgroundPath = capsulePath(in: backgroundRect)
 
     self.layer?.sublayers = nil
     let backPath = backgroundPath?.mutableCopy()
@@ -404,6 +404,58 @@ private extension SquirrelView {
     }
     path.closeSubpath()
     return path
+  }
+
+  /// Draw a true horizontal capsule: straight top and bottom edges joined by
+  /// semicircles whose radius is exactly half the rectangle height.
+  func capsulePath(in rect: NSRect) -> CGPath {
+    let radius = rect.height / 2
+    return CGPath(
+      roundedRect: rect,
+      cornerWidth: radius,
+      cornerHeight: radius,
+      transform: nil
+    )
+  }
+
+  /// Use a true capsule for an ordinary single-line candidate rectangle.
+  /// Keep the existing smoothing algorithm for wrapped or discontinuous
+  /// candidate shapes, where the vertices do not describe one rectangle.
+  func capsulePath(
+    vertex: [NSPoint],
+    straightCorner: Set<Int>,
+    fallbackRadius: CGFloat
+  ) -> CGPath? {
+    guard straightCorner.isEmpty, vertex.count == 4 else {
+      return drawSmoothLines(
+        vertex,
+        straightCorner: straightCorner,
+        alpha: 0.3 * fallbackRadius,
+        beta: 1.4 * fallbackRadius
+      )
+    }
+
+    let xCoordinates = vertex.map(\.x)
+    let yCoordinates = vertex.map(\.y)
+    guard
+      let minX = xCoordinates.min(),
+      let maxX = xCoordinates.max(),
+      let minY = yCoordinates.min(),
+      let maxY = yCoordinates.max(),
+      maxX > minX,
+      maxY > minY
+    else {
+      return nil
+    }
+
+    return capsulePath(
+      in: NSRect(
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY
+      )
+    )
   }
 
   func rectVertex(of rect: NSRect) -> [NSPoint] {
@@ -674,13 +726,21 @@ private extension SquirrelView {
       highlightedPoints = enlarge(vertex: highlightedPoints, by: extraExpansion)
       highlightedPoints = expand(vertex: highlightedPoints, innerBorder: innerBox, outerBorder: outerBox)
       rightCorners = removeCorner(highlightedPoints: highlightedPoints, rightCorners: rightCorners, containingRect: currentContainingRect)
-      resultingPath = drawSmoothLines(highlightedPoints, straightCorner: rightCorners, alpha: 0.3*effectiveRadius, beta: 1.4*effectiveRadius)?.mutableCopy()
+      resultingPath = capsulePath(
+        vertex: highlightedPoints,
+        straightCorner: rightCorners,
+        fallbackRadius: effectiveRadius
+      )?.mutableCopy()
 
       if highlightedPoints2.count > 0 {
         highlightedPoints2 = enlarge(vertex: highlightedPoints2, by: extraExpansion)
         highlightedPoints2 = expand(vertex: highlightedPoints2, innerBorder: innerBox, outerBorder: outerBox)
         rightCorners2 = removeCorner(highlightedPoints: highlightedPoints2, rightCorners: rightCorners2, containingRect: currentContainingRect)
-        let highlightedPath2 = drawSmoothLines(highlightedPoints2, straightCorner: rightCorners2, alpha: 0.3*effectiveRadius, beta: 1.4*effectiveRadius)
+        let highlightedPath2 = capsulePath(
+          vertex: highlightedPoints2,
+          straightCorner: rightCorners2,
+          fallbackRadius: effectiveRadius
+        )
         if let highlightedPath2 = highlightedPath2 {
           resultingPath?.addPath(highlightedPath2)
         }
@@ -707,7 +767,11 @@ private extension SquirrelView {
         var highlightedPoints = rectVertex(of: highlightedRect)
         highlightedPoints = enlarge(vertex: highlightedPoints, by: extraExpansion)
         highlightedPoints = expand(vertex: highlightedPoints, innerBorder: innerBox, outerBorder: outerBox)
-        resultingPath = drawSmoothLines(highlightedPoints, straightCorner: Set(), alpha: effectiveRadius*0.3, beta: effectiveRadius*1.4)?.mutableCopy()
+        resultingPath = capsulePath(
+          vertex: highlightedPoints,
+          straightCorner: Set(),
+          fallbackRadius: effectiveRadius
+        )?.mutableCopy()
       } else {
         resultingPath = nil
       }
