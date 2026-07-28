@@ -48,7 +48,7 @@
 				<key>tsInputModeMenuIconFileKey</key>
 				<string>rime.pdf</string>
 				<key>tsInputModePaletteIconFileKey</key>
-				<string>rime.pdf</string>
+				<string>rime_palette.tiff</string>
 				<key>tsInputModePrimaryInScriptKey</key>
 				<true/>
 				<key>tsInputModeScriptKey</key>
@@ -76,7 +76,7 @@
 				<key>tsInputModeMenuIconFileKey</key>
 				<string>rime.pdf</string>
 				<key>tsInputModePaletteIconFileKey</key>
-				<string>rime.pdf</string>
+				<string>rime_palette.tiff</string>
 				<key>tsInputModePrimaryInScriptKey</key>
 				<true/>
 				<key>tsInputModeScriptKey</key>
