@@ -31,6 +31,7 @@ final class SquirrelView: NSView {
   var preeditRange: NSRange = .empty
   var canPageUp: Bool = false
   var canPageDown: Bool = false
+  var isExpanded = false
   var highlightedPreeditRange: NSRange = .empty
   var separatorWidth: CGFloat = 0
   var shape = CAShapeLayer()
@@ -117,13 +118,14 @@ final class SquirrelView: NSView {
 
   // Will triger - (void)drawRect:(NSRect)dirtyRect
   // swiftlint:disable:next function_parameter_count
-  func drawView(candidateRanges: [NSRange], hilightedIndex: Int, preeditRange: NSRange, highlightedPreeditRange: NSRange, canPageUp: Bool, canPageDown: Bool) {
+  func drawView(candidateRanges: [NSRange], hilightedIndex: Int, preeditRange: NSRange, highlightedPreeditRange: NSRange, canPageUp: Bool, canPageDown: Bool, expanded: Bool = false) {
     self.candidateRanges = candidateRanges
     self.hilightedIndex = hilightedIndex
     self.preeditRange = preeditRange
     self.highlightedPreeditRange = highlightedPreeditRange
     self.canPageUp = canPageUp
     self.canPageDown = canPageDown
+    self.isExpanded = expanded
     self.needsDisplay = true
   }
 
@@ -138,7 +140,7 @@ final class SquirrelView: NSView {
     let theme = currentTheme
 
     var containingRect = dirtyRect
-    containingRect.size.width -= theme.pagingOffset
+    containingRect.size.width -= isExpanded ? 0 : theme.pagingOffset
     let backgroundRect = dirtyRect
 
     // Draw preedit Rect
@@ -217,7 +219,16 @@ final class SquirrelView: NSView {
     }
 
     NSBezierPath.defaultLineWidth = 0
-    backgroundPath = capsulePath(in: backgroundRect)
+    backgroundPath = if isExpanded {
+      CGPath(
+        roundedRect: backgroundRect,
+        cornerWidth: 15,
+        cornerHeight: 15,
+        transform: nil
+      )
+    } else {
+      capsulePath(in: backgroundRect)
+    }
 
     self.layer?.sublayers = nil
     let backPath = backgroundPath?.mutableCopy()
@@ -237,6 +248,33 @@ final class SquirrelView: NSView {
     let panelLayerMask = shapeFromPath(path: backgroundPath)
     panelLayer.mask = panelLayerMask
     self.layer?.addSublayer(panelLayer)
+
+    if isExpanded {
+      let candidateRects = candidateRanges.compactMap { range -> NSRect? in
+        guard let textRange = convert(range: range) else { return nil }
+        return contentRect(range: textRange)
+      }
+      let rows = Dictionary(grouping: candidateRects) { rect in
+        Int((rect.midY * 2).rounded())
+      }.values
+        .map { rects in
+          rects.reduce(rects[0]) { $0.union($1) }
+        }
+        .sorted { $0.minY < $1.minY }
+      if rows.count > 1 {
+        let separatorPath = CGMutablePath()
+        for rowIndex in 0..<(rows.count - 1) {
+          let separatorY = (rows[rowIndex].maxY + rows[rowIndex + 1].minY) / 2 + theme.edgeInset.height
+          separatorPath.move(to: CGPoint(x: backgroundRect.minX, y: separatorY))
+          separatorPath.addLine(to: CGPoint(x: backgroundRect.maxX, y: separatorY))
+        }
+        let separatorLayer = shapeFromPath(path: separatorPath)
+        separatorLayer.fillColor = nil
+        separatorLayer.strokeColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+        separatorLayer.lineWidth = 0.5
+        panelLayer.addSublayer(separatorLayer)
+      }
+    }
 
     // Fill in colors
     if let color = theme.preeditBackgroundColor, let path = preeditPath {
@@ -294,6 +332,8 @@ final class SquirrelView: NSView {
     )
 
     let (pagingLayer, downPath, upPath) = pagingLayer(theme: theme, preeditRect: preeditRect)
+    self.downPath = nil
+    self.upPath = nil
     if let sublayers = pagingLayer.sublayers, !sublayers.isEmpty {
       self.layer?.addSublayer(pagingLayer)
     }
@@ -802,7 +842,7 @@ private extension SquirrelView {
 
   func pagingLayer(theme: SquirrelTheme, preeditRect: CGRect) -> (CAShapeLayer, CGPath?, CGPath?) {
     let layer = CAShapeLayer()
-    guard theme.showPaging && (canPageUp || canPageDown) else { return (layer, nil, nil) }
+    guard !isExpanded && theme.showPaging && (canPageUp || canPageDown) else { return (layer, nil, nil) }
     let controlRect = CGRect(
       x: bounds.maxX - theme.pagingOffset,
       y: bounds.minY,

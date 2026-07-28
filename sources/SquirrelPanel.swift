@@ -33,6 +33,9 @@ final class SquirrelPanel: NSPanel {
   private var lastPage: Bool = true
   private var pagingUp: Bool?
   private var visibleCandidateRange: Range<Int> = 0..<0
+  private var displayedCandidateIndices: [Int] = []
+  private var expandedRows: [Range<Int>] = []
+  private(set) var isExpanded = false
 
   init(position: NSRect) {
     self.position = position
@@ -78,14 +81,18 @@ final class SquirrelPanel: NSPanel {
       } else {
         self.pagingUp = nil
       }
-      if let index, let candidateIndex = candidateIndex(forVisibleIndex: index) {
+      if let index, let candidateIndex = candidateIndex(forDisplayedIndex: index) {
         self.index = candidateIndex
       }
     case .leftMouseUp:
       let (index, preeditIndex, pagingUp) = view.click(at: mousePosition())
 
       if let pagingUp, pagingUp == self.pagingUp {
-        _ = inputController?.page(up: pagingUp)
+        if pagingUp {
+          _ = inputController?.page(up: true)
+        } else {
+          _ = inputController?.expandOrMoveCandidatesDown()
+        }
       } else {
         self.pagingUp = nil
       }
@@ -97,9 +104,9 @@ final class SquirrelPanel: NSPanel {
         }
       }
       if let index,
-         let candidateIndex = candidateIndex(forVisibleIndex: index),
+         let candidateIndex = candidateIndex(forDisplayedIndex: index),
          candidateIndex == self.index {
-        _ = inputController?.selectCandidate(index)
+        _ = inputController?.selectCandidate(candidateIndex, alreadyMapped: true)
       }
     case .mouseEntered:
       acceptsMouseMovedEvents = true
@@ -112,7 +119,7 @@ final class SquirrelPanel: NSPanel {
     case .mouseMoved:
       let (index, _, _) = view.click(at: mousePosition())
       if let index,
-         let candidateIndex = candidateIndex(forVisibleIndex: index),
+         let candidateIndex = candidateIndex(forDisplayedIndex: index),
          cursorIndex != candidateIndex {
         update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments, labels: labels, highlighted: candidateIndex, page: page, lastPage: lastPage, update: false)
       }
@@ -157,12 +164,18 @@ final class SquirrelPanel: NSPanel {
     statusTimer = nil
     orderOut(nil)
     maxHeight = 0
+    isExpanded = false
+    expandedRows = []
+    displayedCandidateIndices = []
   }
 
   // Main function to add attributes to text output from librime
   // swiftlint:disable:next cyclomatic_complexity function_parameter_count
   func update(preedit: String, selRange: NSRange, caretPos: Int, candidates: [String], comments: [String], labels: [String], highlighted index: Int, page: Int, lastPage: Bool, update: Bool) {
     if update {
+      if preedit != self.preedit {
+        isExpanded = false
+      }
       self.preedit = preedit
       self.selRange = selRange
       self.caretPos = caretPos
@@ -176,12 +189,19 @@ final class SquirrelPanel: NSPanel {
     cursorIndex = index
 
     let pageRanges = candidatePageRanges(candidates: candidates, comments: comments, labels: labels)
-    let selectedRange = pageRanges.first(where: { $0.contains(index) }) ?? pageRanges.first ?? 0..<0
+    if isExpanded {
+      expandedRows = expandedCandidateRows(candidates: candidates, comments: comments)
+    } else {
+      expandedRows = []
+    }
+    let navigationRows = isExpanded ? expandedRows : pageRanges
+    let selectedRange = navigationRows.first(where: { $0.contains(index) }) ?? navigationRows.first ?? 0..<0
     visibleCandidateRange = selectedRange
-    let displayedCandidates = Array(candidates[selectedRange])
-    let displayedComments = Array(comments[selectedRange])
-    let displayedLabels = Array(labels.prefix(displayedCandidates.count))
-    let displayedIndex = selectedRange.contains(index) ? index - selectedRange.lowerBound : 0
+    let displayedRange = isExpanded ? candidates.indices : selectedRange
+    displayedCandidateIndices = Array(displayedRange)
+    let displayedCandidates = Array(candidates[displayedRange])
+    let displayedComments = Array(comments[displayedRange])
+    let displayedIndex = displayedRange.contains(index) ? index - displayedRange.lowerBound : 0
 
     if !candidates.isEmpty || !preedit.isEmpty {
       statusMessage = ""
@@ -225,20 +245,43 @@ final class SquirrelPanel: NSPanel {
 
     // candidates
     var candidateRanges = [NSRange]()
+    let expandedParagraphStyle: NSMutableParagraphStyle? = if isExpanded {
+      {
+        let style = theme.paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
+        let availableWidth = max(1, theme.candidateWindowWidth - theme.edgeInset.width * 2)
+        let columnWidth = availableWidth / 6
+        style.tabStops = (1...5).map {
+          NSTextTab(textAlignment: .left, location: columnWidth * CGFloat($0), options: [:])
+        }
+        style.defaultTabInterval = columnWidth
+        style.lineSpacing = 7
+        style.paragraphSpacing = 0
+        style.paragraphSpacingBefore = 0
+        return style
+      }()
+    } else {
+      nil
+    }
+
     for i in 0..<displayedCandidates.count {
       let attrs = i == displayedIndex ? theme.highlightedAttrs : theme.attrs
       let labelAttrs = i == displayedIndex ? theme.labelHighlightedAttrs : theme.labelAttrs
       let commentAttrs = i == displayedIndex ? theme.commentHighlightedAttrs : theme.commentAttrs
+      let candidateIndex = displayedCandidateIndices[i]
+      let localIndex = max(0, candidateIndex - selectedRange.lowerBound)
 
       let label = if theme.candidateFormat.contains(/\[label\]/) {
-        if displayedLabels.count > 1 && i < displayedLabels.count {
-          displayedLabels[i]
-        } else if displayedLabels.count == 1 && i < displayedLabels.first!.count {
+        if isExpanded && !selectedRange.contains(candidateIndex) {
+          // Reserve the label's width so candidates align between rows.
+          "\u{2007}"
+        } else if labels.count > 1 && localIndex < labels.count {
+          labels[localIndex]
+        } else if labels.count == 1 && localIndex < labels[0].count {
           // custom: A. B. C...
-          String(displayedLabels.first![displayedLabels.first!.index(displayedLabels.first!.startIndex, offsetBy: i)])
+          String(labels[0][labels[0].index(labels[0].startIndex, offsetBy: localIndex)])
         } else {
           // default: 1. 2. 3...
-          "\(i+1)"
+          "\(localIndex + 1)"
         }
       } else {
         ""
@@ -267,27 +310,40 @@ final class SquirrelPanel: NSPanel {
         line.addAttribute(.noBreak, value: true, range: NSRange(location: 1, length: line.length-1))
       }
 
-      let lineSeparator = NSAttributedString(string: linear ? "  " : "\n", attributes: attrs)
       if i > 0 {
+        let startsNewExpandedRow = isExpanded && expandedRows.contains(where: { $0.lowerBound == candidateIndex })
+        let separatorText = isExpanded ? (startsNewExpandedRow ? "\n" : "\t") : (linear ? "  " : "\n")
+        let lineSeparator = NSMutableAttributedString(string: separatorText, attributes: attrs)
+        if let expandedParagraphStyle {
+          lineSeparator.addAttribute(.paragraphStyle, value: expandedParagraphStyle, range: NSRange(location: 0, length: lineSeparator.length))
+        }
         text.append(lineSeparator)
+        if isExpanded {
+          view.separatorWidth = 0
+        } else {
+          let str = lineSeparator.mutableCopy() as! NSMutableAttributedString
+          if vertical {
+            str.addAttribute(.verticalGlyphForm, value: 1, range: NSRange(location: 0, length: str.length))
+          }
+          view.separatorWidth = str.boundingRect(with: .zero).width
+        }
       }
-      let str = lineSeparator.mutableCopy() as! NSMutableAttributedString
-      if vertical {
-        str.addAttribute(.verticalGlyphForm, value: 1, range: NSRange(location: 0, length: str.length))
-      }
-      view.separatorWidth = str.boundingRect(with: .zero).width
 
       let paragraphStyleCandidate = (i == 0 ? theme.firstParagraphStyle : theme.paragraphStyle).mutableCopy() as! NSMutableParagraphStyle
-      if linear {
-        paragraphStyleCandidate.paragraphSpacingBefore -= theme.linespace
-        paragraphStyleCandidate.lineSpacing = theme.linespace
+      if let expandedParagraphStyle {
+        line.addAttribute(.paragraphStyle, value: expandedParagraphStyle, range: NSRange(location: 0, length: line.length))
+      } else {
+        if linear {
+          paragraphStyleCandidate.paragraphSpacingBefore -= theme.linespace
+          paragraphStyleCandidate.lineSpacing = theme.linespace
+        }
+        if !linear, let labelEnd = labeledLine.string.firstMatch(of: /\[(candidate|comment)\]/)?.range.lowerBound {
+          let labelString = labeledLine.attributedSubstring(from: NSRange(location: 0, length: labelEnd.utf16Offset(in: labeledLine.string)))
+          let labelWidth = labelString.boundingRect(with: .zero, options: [.usesLineFragmentOrigin]).width
+          paragraphStyleCandidate.headIndent = labelWidth
+        }
+        line.addAttribute(.paragraphStyle, value: paragraphStyleCandidate, range: NSRange(location: 0, length: line.length))
       }
-      if !linear, let labelEnd = labeledLine.string.firstMatch(of: /\[(candidate|comment)\]/)?.range.lowerBound {
-        let labelString = labeledLine.attributedSubstring(from: NSRange(location: 0, length: labelEnd.utf16Offset(in: labeledLine.string)))
-        let labelWidth = labelString.boundingRect(with: .zero, options: [.usesLineFragmentOrigin]).width
-        paragraphStyleCandidate.headIndent = labelWidth
-      }
-      line.addAttribute(.paragraphStyle, value: paragraphStyleCandidate, range: NSRange(location: 0, length: line.length))
 
       candidateRanges.append(NSRange(location: text.length, length: line.length))
       text.append(line)
@@ -302,7 +358,8 @@ final class SquirrelPanel: NSPanel {
       preeditRange: preeditRange,
       highlightedPreeditRange: highlightedPreeditRange,
       canPageUp: page > 0 || selectedRange.lowerBound > 0,
-      canPageDown: !lastPage || selectedRange.upperBound < candidates.count
+      canPageDown: !lastPage || selectedRange.upperBound < candidates.count,
+      expanded: isExpanded
     )
     show()
   }
@@ -316,8 +373,44 @@ final class SquirrelPanel: NSPanel {
     return visibleCandidateRange.lowerBound + index
   }
 
+  func candidateIndex(forDisplayedIndex index: Int) -> Int? {
+    guard index >= 0 && index < displayedCandidateIndices.count else { return nil }
+    return displayedCandidateIndices[index]
+  }
+
+  func expandCandidates() -> Bool {
+    guard !isExpanded, !candidates.isEmpty else { return false }
+    isExpanded = true
+    update(
+      preedit: preedit,
+      selRange: selRange,
+      caretPos: caretPos,
+      candidates: candidates,
+      comments: comments,
+      labels: labels,
+      highlighted: index,
+      page: page,
+      lastPage: lastPage,
+      update: false
+    )
+    return true
+  }
+
+  func expandedRowTarget(up: Bool) -> Int? {
+    guard isExpanded,
+          let current = expandedRows.firstIndex(where: { $0.contains(index) })
+    else {
+      return nil
+    }
+    let target = up ? current - 1 : current + 1
+    guard target >= 0 && target < expandedRows.count else { return nil }
+    return expandedRows[target].lowerBound
+  }
+
   func localPageTarget(up: Bool) -> Int? {
-    let ranges = candidatePageRanges(candidates: candidates, comments: comments, labels: labels)
+    let ranges = isExpanded
+      ? expandedRows
+      : candidatePageRanges(candidates: candidates, comments: comments, labels: labels)
     guard let current = ranges.firstIndex(of: visibleCandidateRange) else { return nil }
     let target = up ? current - 1 : current + 1
     guard target >= 0 && target < ranges.count else { return nil }
@@ -400,13 +493,9 @@ private extension SquirrelPanel {
 
     func label(at index: Int) -> String {
       guard theme.candidateFormat.contains(/\[label\]/) else { return "" }
-      if labels.count > 1 && index < labels.count {
-        return labels[index]
-      }
-      if labels.count == 1 && index < labels[0].count {
-        return String(labels[0][labels[0].index(labels[0].startIndex, offsetBy: index)])
-      }
-      return "\(index + 1)"
+      // Visual rows are renumbered from 1, so reserve a single digit here.
+      // Using the backing-page index would incorrectly make later rows wider.
+      return "9"
     }
 
     func width(at index: Int) -> CGFloat {
@@ -448,6 +537,51 @@ private extension SquirrelPanel {
     return ranges
   }
 
+  func expandedCandidateRows(candidates: [String], comments: [String]) -> [Range<Int>] {
+    guard !candidates.isEmpty else { return [] }
+    let theme = view.currentTheme
+    let columnCount = 6
+    let availableWidth = max(1, theme.candidateWindowWidth - theme.edgeInset.width * 2)
+    let columnWidth = availableWidth / CGFloat(columnCount)
+
+    func candidateWidth(at index: Int) -> CGFloat {
+      let candidate = candidates[index].precomposedStringWithCanonicalMapping
+      let comment = comments[index].precomposedStringWithCanonicalMapping
+      let line = NSMutableAttributedString(string: theme.candidateFormat, attributes: theme.labelAttrs)
+      for range in line.string.ranges(of: /\[candidate\]/) {
+        line.addAttributes(theme.attrs, range: convert(range: range, in: line.string))
+      }
+      for range in line.string.ranges(of: /\[comment\]/) {
+        line.addAttributes(theme.commentAttrs, range: convert(range: range, in: line.string))
+      }
+      line.mutableString.replaceOccurrences(of: "[label]", with: "9", range: NSRange(location: 0, length: line.length))
+      line.mutableString.replaceOccurrences(of: "[candidate]", with: candidate, range: NSRange(location: 0, length: line.length))
+      line.mutableString.replaceOccurrences(of: "[comment]", with: comment, range: NSRange(location: 0, length: line.length))
+      return ceil(
+        line.boundingRect(
+          with: NSSize(width: 10_000, height: 100),
+          options: [.usesLineFragmentOrigin, .usesFontLeading]
+        ).width
+      )
+    }
+
+    var rows = [Range<Int>]()
+    var rowStart = 0
+    var usedColumns = 0
+    for index in candidates.indices {
+      let span = min(columnCount, max(1, Int(ceil(candidateWidth(at: index) / columnWidth))))
+      if index > rowStart && usedColumns + span > columnCount {
+        rows.append(rowStart..<index)
+        rowStart = index
+        usedColumns = span
+      } else {
+        usedColumns += span
+      }
+    }
+    rows.append(rowStart..<candidates.count)
+    return rows
+  }
+
   // Get the window size, the windows will be the dirtyRect in
   // SquirrelView.drawRect
   // swiftlint:disable:next cyclomatic_complexity
@@ -464,8 +598,9 @@ private extension SquirrelPanel {
     // Break line if the text is too long, based on screen size.
     let textWidth = maxTextWidth()
     let maxTextHeight = vertical ? screenRect.width - theme.edgeInset.width * 2 : screenRect.height - theme.edgeInset.height * 2
+    let pagingOffset = isExpanded ? 0 : theme.pagingOffset
     let configuredTextWidth = if !vertical && theme.candidateWindowWidth > 0 {
-      max(1, theme.candidateWindowWidth - theme.edgeInset.width * 2 - theme.pagingOffset)
+      max(1, theme.candidateWindowWidth - theme.edgeInset.width * 2 - pagingOffset)
     } else {
       textWidth
     }
@@ -486,12 +621,12 @@ private extension SquirrelPanel {
 
     if vertical {
       panelRect.size = NSSize(width: min(0.95 * screenRect.width, contentRect.height + theme.edgeInset.height * 2),
-                              height: min(0.95 * screenRect.height, contentRect.width + theme.edgeInset.width * 2) + theme.pagingOffset)
+                              height: min(0.95 * screenRect.height, contentRect.width + theme.edgeInset.width * 2) + pagingOffset)
 
       // To avoid jumping up and down while typing, use the lower screen when
       // typing on upper, and vice versa
       if position.midY / screenRect.height >= 0.5 {
-        panelRect.origin.y = position.minY - SquirrelTheme.offsetHeight - panelRect.height + theme.pagingOffset
+        panelRect.origin.y = position.minY - SquirrelTheme.offsetHeight - panelRect.height + pagingOffset
       } else {
         panelRect.origin.y = position.maxY + SquirrelTheme.offsetHeight
       }
@@ -502,12 +637,12 @@ private extension SquirrelPanel {
         panelRect.origin.x += preeditRect.height + theme.edgeInset.width
       }
     } else {
-      let naturalWidth = contentRect.width + theme.edgeInset.width * 2 + theme.pagingOffset
+      let naturalWidth = contentRect.width + theme.edgeInset.width * 2 + pagingOffset
       let preferredWidth = theme.candidateWindowWidth > 0 ? theme.candidateWindowWidth : naturalWidth
       panelRect.size = NSSize(width: min(0.95 * screenRect.width, preferredWidth),
                               height: min(0.95 * screenRect.height, contentRect.height + theme.edgeInset.height * 2))
       panelRect.origin = NSPoint(
-        x: position.minX - theme.pagingOffset * 0.6,
+        x: position.minX - pagingOffset * 0.6,
         y: position.minY - SquirrelTheme.offsetHeight - panelRect.height
       )
     }
@@ -545,12 +680,12 @@ private extension SquirrelPanel {
 
     view.frame = contentView!.bounds
     view.textView.frame = contentView!.bounds
-    view.textView.frame.size.width -= theme.pagingOffset
+    view.textView.frame.size.width -= pagingOffset
     view.textView.textContainerInset = theme.edgeInset
 
     if theme.translucency {
       back.frame = contentView!.bounds
-      back.frame.size.width += theme.pagingOffset
+      back.frame.size.width += pagingOffset
       back.appearance = NSApp.effectiveAppearance
       back.isHidden = false
     } else {
