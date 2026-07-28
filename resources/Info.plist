@@ -55,9 +55,9 @@
 				<key>tsInputModePaletteIconFileKey</key>
 				<string>rime.pdf</string>
 				<key>tsInputModePrimaryInScriptKey</key>
-				<true/>
+				<false/>
 				<key>tsInputModeScriptKey</key>
-				<string>smUnicodeScript</string>
+				<string>smSimpChinese</string>
 			</dict>
 			<key>im.rime.inputmethod.Squirrel.Hant</key>
 			<dict>
@@ -88,9 +88,9 @@
 				<key>tsInputModePaletteIconFileKey</key>
 				<string>rime.pdf</string>
 				<key>tsInputModePrimaryInScriptKey</key>
-				<true/>
+				<false/>
 				<key>tsInputModeScriptKey</key>
-				<string>smUnicodeScript</string>
+				<string>smTradChinese</string>
 			</dict>
 		</dict>
 		<key>tsVisibleInputModeOrderedArrayKey</key>
