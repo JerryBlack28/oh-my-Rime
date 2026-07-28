@@ -58,6 +58,7 @@ final class SquirrelTheme {
   private(set) var preeditLinespace: CGFloat = 0
   private(set) var baseOffset: CGFloat = 0
   private(set) var alpha: CGFloat = 1
+  private(set) var candidateWindowWidth: CGFloat = 0
 
   private(set) var translucency = false
   private(set) var mutualExclusive = false
@@ -185,7 +186,7 @@ final class SquirrelTheme {
   }
   var pagingOffset: CGFloat {
     if showPaging {
-      (labelFontSize ?? fontSize ?? Self.defaultFontSize) * 1.5
+      (fontSize ?? Self.defaultFontSize) * 1.75
     } else {
       0
     }
@@ -214,6 +215,7 @@ final class SquirrelTheme {
     preeditLinespace ?= config.getDouble("style/spacing")
     baseOffset ?= config.getDouble("style/base_offset")
     shadowSize ?= config.getDouble("style/shadow_size").map { max(0, $0) }
+    candidateWindowWidth ?= config.getDouble("style/candidate_window_width").map { max(0, $0) }
 
     var fontName = config.getString("style/font_face")
     var fontSize = config.getDouble("style/font_point")
@@ -272,6 +274,7 @@ final class SquirrelTheme {
         preeditLinespace ?= config.getDouble("\(prefix)/spacing")
         baseOffset ?= config.getDouble("\(prefix)/base_offset")
         shadowSize ?= config.getDouble("\(prefix)/shadow_size").map { max(0, $0) }
+        candidateWindowWidth ?= config.getDouble("\(prefix)/candidate_window_width").map { max(0, $0) }
       }
     } else {
       available = false

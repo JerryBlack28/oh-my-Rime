@@ -362,7 +362,12 @@ private extension SquirrelPanel {
     // Break line if the text is too long, based on screen size.
     let textWidth = maxTextWidth()
     let maxTextHeight = vertical ? screenRect.width - theme.edgeInset.width * 2 : screenRect.height - theme.edgeInset.height * 2
-    view.textContainer.size = NSSize(width: textWidth, height: maxTextHeight)
+    let configuredTextWidth = if !vertical && theme.candidateWindowWidth > 0 {
+      max(1, theme.candidateWindowWidth - theme.edgeInset.width * 2 - theme.pagingOffset)
+    } else {
+      textWidth
+    }
+    view.textContainer.size = NSSize(width: min(textWidth, configuredTextWidth), height: maxTextHeight)
 
     var panelRect = NSRect.zero
     // in vertical mode, the width and height are interchanged
@@ -395,10 +400,14 @@ private extension SquirrelPanel {
         panelRect.origin.x += preeditRect.height + theme.edgeInset.width
       }
     } else {
-      panelRect.size = NSSize(width: min(0.95 * screenRect.width, contentRect.width + theme.edgeInset.width * 2),
+      let naturalWidth = contentRect.width + theme.edgeInset.width * 2 + theme.pagingOffset
+      let preferredWidth = theme.candidateWindowWidth > 0 ? theme.candidateWindowWidth : naturalWidth
+      panelRect.size = NSSize(width: min(0.95 * screenRect.width, preferredWidth),
                               height: min(0.95 * screenRect.height, contentRect.height + theme.edgeInset.height * 2))
-      panelRect.size.width += theme.pagingOffset
-      panelRect.origin = NSPoint(x: position.minX - theme.pagingOffset, y: position.minY - SquirrelTheme.offsetHeight - panelRect.height)
+      panelRect.origin = NSPoint(
+        x: position.minX - theme.pagingOffset * 0.6,
+        y: position.minY - SquirrelTheme.offsetHeight - panelRect.height
+      )
     }
     if panelRect.maxX > screenRect.maxX {
       panelRect.origin.x = screenRect.maxX - panelRect.width
@@ -435,7 +444,6 @@ private extension SquirrelPanel {
     view.frame = contentView!.bounds
     view.textView.frame = contentView!.bounds
     view.textView.frame.size.width -= theme.pagingOffset
-    view.textView.frame.origin.x += theme.pagingOffset
     view.textView.textContainerInset = theme.edgeInset
 
     if theme.translucency {

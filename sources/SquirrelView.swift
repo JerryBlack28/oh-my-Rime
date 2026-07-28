@@ -139,7 +139,7 @@ final class SquirrelView: NSView {
 
     var containingRect = dirtyRect
     containingRect.size.width -= theme.pagingOffset
-    let backgroundRect = containingRect
+    let backgroundRect = dirtyRect
 
     // Draw preedit Rect
     var preeditRect = NSRect.zero
@@ -287,9 +287,11 @@ final class SquirrelView: NSView {
       }
       panelLayer.addSublayer(layer)
     }
-    panelLayer.setAffineTransform(CGAffineTransform(translationX: theme.pagingOffset, y: 0))
     let panelPath = CGMutablePath()
-    panelPath.addPath(backgroundPath!, transform: panelLayer.affineTransform().scaledBy(x: 1, y: -1).translatedBy(x: 0, y: -dirtyRect.height))
+    panelPath.addPath(
+      backgroundPath!,
+      transform: CGAffineTransform(scaleX: 1, y: -1).translatedBy(x: 0, y: -dirtyRect.height)
+    )
 
     let (pagingLayer, downPath, upPath) = pagingLayer(theme: theme, preeditRect: preeditRect)
     if let sublayers = pagingLayer.sublayers, !sublayers.isEmpty {
@@ -319,7 +321,7 @@ final class SquirrelView: NSView {
       return (nil, nil, true)
     }
     if let path = shape.path, path.contains(clickPoint) {
-      var point = NSPoint(x: clickPoint.x - textView.textContainerInset.width - currentTheme.pagingOffset,
+      var point = NSPoint(x: clickPoint.x - textView.textContainerInset.width,
                           y: clickPoint.y - textView.textContainerInset.height)
       let fragment = textLayoutManager.textLayoutFragment(for: point)
       if let fragment = fragment {
@@ -424,7 +426,8 @@ private extension SquirrelView {
   func capsulePath(
     vertex: [NSPoint],
     straightCorner: Set<Int>,
-    fallbackRadius: CGFloat
+    fallbackRadius: CGFloat,
+    trailingInset: CGFloat = 0
   ) -> CGPath? {
     guard straightCorner.isEmpty, vertex.count == 4 else {
       return drawSmoothLines(
@@ -442,7 +445,7 @@ private extension SquirrelView {
       let maxX = xCoordinates.max(),
       let minY = yCoordinates.min(),
       let maxY = yCoordinates.max(),
-      maxX > minX,
+      maxX - trailingInset > minX,
       maxY > minY
     else {
       return nil
@@ -452,7 +455,7 @@ private extension SquirrelView {
       in: NSRect(
         x: minX,
         y: minY,
-        width: maxX - minX,
+        width: maxX - minX - trailingInset,
         height: maxY - minY
       )
     )
@@ -729,7 +732,8 @@ private extension SquirrelView {
       resultingPath = capsulePath(
         vertex: highlightedPoints,
         straightCorner: rightCorners,
-        fallbackRadius: effectiveRadius
+        fallbackRadius: effectiveRadius,
+        trailingInset: extraExpansion == 0 ? 4.5 : 0
       )?.mutableCopy()
 
       if highlightedPoints2.count > 0 {
@@ -799,33 +803,64 @@ private extension SquirrelView {
   func pagingLayer(theme: SquirrelTheme, preeditRect: CGRect) -> (CAShapeLayer, CGPath?, CGPath?) {
     let layer = CAShapeLayer()
     guard theme.showPaging && (canPageUp || canPageDown) else { return (layer, nil, nil) }
-    guard let firstCandidate = candidateRanges.first, let range = convert(range: firstCandidate) else { return (layer, nil, nil) }
-    var height = contentRect(range: range).height
-    let preeditHeight = max(0, preeditRect.height + theme.preeditLinespace / 2 + theme.hilitedCornerRadius / 2 - theme.edgeInset.height) + theme.edgeInset.height - theme.linespace / 2
-    height += theme.linespace
-    let radius = min(0.5 * theme.pagingOffset, 2 * height / 9)
-    let effectiveRadius = min(theme.cornerRadius, 0.6 * radius)
-    guard let trianglePath = drawSmoothLines(
-      triangle(center: .zero, radius: radius),
-      straightCorner: [], alpha: 0.3 * effectiveRadius, beta: 1.4 * effectiveRadius
-    ) else {
-      return (layer, nil, nil)
+    let controlRect = CGRect(
+      x: bounds.maxX - theme.pagingOffset,
+      y: bounds.minY,
+      width: theme.pagingOffset,
+      height: bounds.height
+    )
+    let separatorX = controlRect.minX
+    let separatorInset = max(8, bounds.height * 0.16)
+    let separatorPath = CGMutablePath()
+    separatorPath.move(to: CGPoint(x: separatorX, y: bounds.minY + separatorInset))
+    separatorPath.addLine(to: CGPoint(x: separatorX, y: bounds.maxY - separatorInset))
+    let separatorLayer = shapeFromPath(path: separatorPath)
+    separatorLayer.fillColor = nil
+    separatorLayer.strokeColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
+    separatorLayer.lineWidth = 1
+    layer.addSublayer(separatorLayer)
+
+    func chevronPath(center: CGPoint, pointsDown: Bool) -> CGPath {
+      let direction: CGFloat = pointsDown ? 1 : -1
+      let path = CGMutablePath()
+      path.move(to: CGPoint(x: center.x - 5.5, y: center.y - 3 * direction))
+      path.addLine(to: CGPoint(x: center.x, y: center.y + 3 * direction))
+      path.addLine(to: CGPoint(x: center.x + 5.5, y: center.y - 3 * direction))
+      return path
     }
+
+    func addChevron(_ path: CGPath) {
+      let chevronLayer = shapeFromPath(path: path)
+      chevronLayer.fillColor = nil
+      chevronLayer.strokeColor = NSColor.tertiaryLabelColor.cgColor
+      chevronLayer.lineWidth = 2.5
+      chevronLayer.lineCap = .round
+      chevronLayer.lineJoin = .round
+      layer.addSublayer(chevronLayer)
+    }
+
     var downPath: CGPath?
     var upPath: CGPath?
-    if canPageDown {
-      var downTransform = CGAffineTransform(translationX: 0.5 * theme.pagingOffset, y: 2 * height / 3 + preeditHeight)
-      let downLayer = shapeFromPath(path: trianglePath.copy(using: &downTransform))
-      downLayer.fillColor = theme.backgroundColor.cgColor
-      downPath = trianglePath.copy(using: &downTransform)
-      layer.addSublayer(downLayer)
-    }
-    if canPageUp {
-      var upTransform = CGAffineTransform(rotationAngle: .pi).translatedBy(x: -0.5 * theme.pagingOffset, y: -height / 3 - preeditHeight)
-      let upLayer = shapeFromPath(path: trianglePath.copy(using: &upTransform))
-      upLayer.fillColor = theme.backgroundColor.cgColor
-      upPath = trianglePath.copy(using: &upTransform)
-      layer.addSublayer(upLayer)
+    let centerX = controlRect.midX
+    if canPageUp && canPageDown {
+      let upChevron = chevronPath(
+        center: CGPoint(x: centerX, y: controlRect.midY - 7),
+        pointsDown: false
+      )
+      let downChevron = chevronPath(
+        center: CGPoint(x: centerX, y: controlRect.midY + 7),
+        pointsDown: true
+      )
+      addChevron(upChevron)
+      addChevron(downChevron)
+      upPath = CGPath(rect: CGRect(x: controlRect.minX, y: controlRect.minY, width: controlRect.width, height: controlRect.height / 2), transform: nil)
+      downPath = CGPath(rect: CGRect(x: controlRect.minX, y: controlRect.midY, width: controlRect.width, height: controlRect.height / 2), transform: nil)
+    } else if canPageDown {
+      addChevron(chevronPath(center: CGPoint(x: centerX, y: controlRect.midY), pointsDown: true))
+      downPath = CGPath(rect: controlRect, transform: nil)
+    } else if canPageUp {
+      addChevron(chevronPath(center: CGPoint(x: centerX, y: controlRect.midY), pointsDown: false))
+      upPath = CGPath(rect: controlRect, transform: nil)
     }
     return (layer, downPath, upPath)
   }
