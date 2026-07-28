@@ -109,8 +109,11 @@ final class SquirrelInputController: IMKInputController {
       // The native-width candidate window can contain a different number of
       // candidates on each visual page. Handle paging and numeric selection
       // here so they map back to the corresponding librime page index.
-      if keyCode == 116 || keyCode == 121 {
-        handled = page(up: keyCode == 116)
+      let hasOnlyCapsLock = modifiers.intersection([.command, .control, .option, .shift]).isEmpty
+      let pageUpKeys: Set<UInt16> = [UInt16(kVK_UpArrow), UInt16(kVK_ANSI_Minus), UInt16(kVK_PageUp)]
+      let pageDownKeys: Set<UInt16> = [UInt16(kVK_DownArrow), UInt16(kVK_ANSI_Equal), UInt16(kVK_PageDown)]
+      if hasOnlyCapsLock, pageUpKeys.contains(keyCode) || pageDownKeys.contains(keyCode) {
+        handled = page(up: pageUpKeys.contains(keyCode))
         if handled {
           break
         }
