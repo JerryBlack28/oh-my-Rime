@@ -152,8 +152,8 @@ final class SquirrelInputController: IMKInputController {
   }
 
   func selectCandidate(_ index: Int) -> Bool {
-    let candidateIndex = NSApp.squirrelAppDelegate.panel?.candidateIndex(forVisibleIndex: index) ?? index
-    let success = rimeAPI.select_candidate_on_current_page(session, candidateIndex)
+    let candidateIndex = NSApp.squirrelAppDelegate.panel?.absoluteCandidateIndex(forVisibleIndex: index) ?? index
+    let success = rimeAPI.select_candidate(session, candidateIndex)
     if success {
       rimeUpdate()
     }
@@ -163,10 +163,31 @@ final class SquirrelInputController: IMKInputController {
   // swiftlint:disable:next identifier_name
   func page(up: Bool) -> Bool {
     var handled = false
+    if up,
+       let panel = NSApp.squirrelAppDelegate.panel,
+       panel.isVisible,
+       panel.isAtFirstVisualPage,
+       panel.hasPreviousBackingPage {
+      // Rime moves between its backing pages from the currently highlighted
+      // item. After arriving at the previous backing page, continue at its
+      // final visual group rather than its first candidate.
+      handled = rimeAPI.change_page(session, true)
+      if handled {
+        rimeUpdate()
+        if let panel = NSApp.squirrelAppDelegate.panel,
+           let target = panel.lastVisualPageTarget(), target > 0 {
+          handled = rimeAPI.highlight_candidate(session, panel.absoluteCandidateIndex(forLocalIndex: target))
+          if handled {
+            rimeUpdate()
+          }
+        }
+      }
+      return handled
+    }
     if let panel = NSApp.squirrelAppDelegate.panel,
        panel.isVisible,
        let localTarget = panel.localPageTarget(up: up) {
-      handled = rimeAPI.highlight_candidate_on_current_page(session, localTarget)
+      handled = rimeAPI.highlight_candidate(session, panel.absoluteCandidateIndex(forLocalIndex: localTarget))
     } else {
       // librime preserves the highlighted offset when changing its larger
       // backing page. Reset it so the next visual group starts at candidate 1
@@ -569,12 +590,59 @@ private extension SquirrelInputController {
       }
       // swiftlint:enable identifier_name
       let page = Int(ctx.menu.page_no)
+      let pageSize = Int(ctx.menu.page_size)
       let lastPage = ctx.menu.is_last_page
+      let highlighted = Int(ctx.menu.highlighted_candidate_index)
+      let selectedCandidate = page * pageSize + highlighted
+
+      // Keep the fixed-width window independent from librime's backing-page
+      // boundary by keeping adjacent backing pages in one candidate stream.
+      // The panel can therefore form visual pages across either boundary.
+      var displayedCandidates = candidates
+      var displayedComments = comments
+      var displayedLastPage = lastPage
+      var candidateOffset = page * pageSize
+      if page > 0, pageSize > 0 {
+        let previousPageStart = candidateOffset - pageSize
+        if rimeAPI.highlight_candidate(session, previousPageStart) {
+          var previousContext = RimeContext_stdbool.rimeStructInit()
+          if rimeAPI.get_context(session, &previousContext) {
+            var previousCandidates = [String]()
+            var previousComments = [String]()
+            for i in 0..<Int(previousContext.menu.num_candidates) {
+              let candidate = previousContext.menu.candidates[i]
+              previousCandidates.append(candidate.text.map { String(cString: $0) } ?? "")
+              previousComments.append(candidate.comment.map { String(cString: $0) } ?? "")
+            }
+            displayedCandidates = previousCandidates + displayedCandidates
+            displayedComments = previousComments + displayedComments
+            candidateOffset = previousPageStart
+            _ = rimeAPI.free_context(&previousContext)
+          }
+          _ = rimeAPI.highlight_candidate(session, selectedCandidate)
+        }
+      }
+      if !lastPage, pageSize > 0 {
+        let nextPageStart = page * pageSize + pageSize
+        if rimeAPI.highlight_candidate(session, nextPageStart) {
+          var nextContext = RimeContext_stdbool.rimeStructInit()
+          if rimeAPI.get_context(session, &nextContext) {
+            for i in 0..<Int(nextContext.menu.num_candidates) {
+              let candidate = nextContext.menu.candidates[i]
+              displayedCandidates.append(candidate.text.map { String(cString: $0) } ?? "")
+              displayedComments.append(candidate.comment.map { String(cString: $0) } ?? "")
+            }
+            displayedLastPage = nextContext.menu.is_last_page
+            _ = rimeAPI.free_context(&nextContext)
+          }
+          _ = rimeAPI.highlight_candidate(session, selectedCandidate)
+        }
+      }
 
       let selRange = NSRange(location: start.utf16Offset(in: preedit), length: preedit.utf16.distance(from: start, to: end))
       showPanel(preedit: inlinePreedit ? "" : preedit, selRange: selRange, caretPos: caretPos.utf16Offset(in: preedit),
-                candidates: candidates, comments: comments, labels: labels, highlighted: Int(ctx.menu.highlighted_candidate_index),
-                page: page, lastPage: lastPage)
+                candidates: displayedCandidates, comments: displayedComments, labels: labels, candidateOffset: candidateOffset,
+                highlighted: selectedCandidate - candidateOffset, page: candidateOffset / pageSize, lastPage: displayedLastPage)
       _ = rimeAPI.free_context(&ctx)
     } else {
       hidePalettes()
@@ -614,7 +682,7 @@ private extension SquirrelInputController {
   }
 
   // swiftlint:disable:next function_parameter_count
-  func showPanel(preedit: String, selRange: NSRange, caretPos: Int, candidates: [String], comments: [String], labels: [String], highlighted: Int, page: Int, lastPage: Bool) {
+  func showPanel(preedit: String, selRange: NSRange, caretPos: Int, candidates: [String], comments: [String], labels: [String], candidateOffset: Int, highlighted: Int, page: Int, lastPage: Bool) {
     // print("[DEBUG] showPanelWithPreedit:...:")
     guard let client = client else { return }
     var inputPos = NSRect()
@@ -623,7 +691,7 @@ private extension SquirrelInputController {
       panel.position = inputPos
       panel.inputController = self
       panel.update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments, labels: labels,
-                   highlighted: highlighted, page: page, lastPage: lastPage, update: true)
+                   candidateOffset: candidateOffset, highlighted: highlighted, page: page, lastPage: lastPage, update: true)
     }
   }
 }

@@ -25,6 +25,7 @@ final class SquirrelPanel: NSPanel {
   private var candidates: [String] = .init()
   private var comments: [String] = .init()
   private var labels: [String] = .init()
+  private var candidateOffset: Int = 0
   private var index: Int = 0
   private var cursorIndex: Int = 0
   private var scrollDirection: CGVector = .zero
@@ -106,7 +107,7 @@ final class SquirrelPanel: NSPanel {
     case .mouseExited:
       acceptsMouseMovedEvents = false
       if cursorIndex != index {
-        update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments, labels: labels, highlighted: index, page: page, lastPage: lastPage, update: false)
+        update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments, labels: labels, candidateOffset: candidateOffset, highlighted: index, page: page, lastPage: lastPage, update: false)
       }
       pagingUp = nil
     case .mouseMoved:
@@ -114,7 +115,7 @@ final class SquirrelPanel: NSPanel {
       if let index,
          let candidateIndex = candidateIndex(forVisibleIndex: index),
          cursorIndex != candidateIndex {
-        update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments, labels: labels, highlighted: candidateIndex, page: page, lastPage: lastPage, update: false)
+        update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments, labels: labels, candidateOffset: candidateOffset, highlighted: candidateIndex, page: page, lastPage: lastPage, update: false)
       }
     case .scrollWheel:
       if event.phase == .began {
@@ -161,7 +162,7 @@ final class SquirrelPanel: NSPanel {
 
   // Main function to add attributes to text output from librime
   // swiftlint:disable:next cyclomatic_complexity function_parameter_count
-  func update(preedit: String, selRange: NSRange, caretPos: Int, candidates: [String], comments: [String], labels: [String], highlighted index: Int, page: Int, lastPage: Bool, update: Bool) {
+  func update(preedit: String, selRange: NSRange, caretPos: Int, candidates: [String], comments: [String], labels: [String], candidateOffset: Int, highlighted index: Int, page: Int, lastPage: Bool, update: Bool) {
     if update {
       self.preedit = preedit
       self.selRange = selRange
@@ -169,6 +170,7 @@ final class SquirrelPanel: NSPanel {
       self.candidates = candidates
       self.comments = comments
       self.labels = labels
+      self.candidateOffset = candidateOffset
       self.index = index
       self.page = page
       self.lastPage = lastPage
@@ -316,12 +318,32 @@ final class SquirrelPanel: NSPanel {
     return visibleCandidateRange.lowerBound + index
   }
 
+  func absoluteCandidateIndex(forVisibleIndex index: Int) -> Int? {
+    candidateIndex(forVisibleIndex: index).map { candidateOffset + $0 }
+  }
+
+  func absoluteCandidateIndex(forLocalIndex index: Int) -> Int {
+    candidateOffset + index
+  }
+
   func localPageTarget(up: Bool) -> Int? {
     let ranges = candidatePageRanges(candidates: candidates, comments: comments, labels: labels)
     guard let current = ranges.firstIndex(of: visibleCandidateRange) else { return nil }
     let target = up ? current - 1 : current + 1
     guard target >= 0 && target < ranges.count else { return nil }
     return ranges[target].lowerBound
+  }
+
+  var isAtFirstVisualPage: Bool {
+    visibleCandidateRange.lowerBound == 0
+  }
+
+  var hasPreviousBackingPage: Bool {
+    page > 0
+  }
+
+  func lastVisualPageTarget() -> Int? {
+    candidatePageRanges(candidates: candidates, comments: comments, labels: labels).last?.lowerBound
   }
 
   func updateStatus(long longMessage: String, short shortMessage: String) {
