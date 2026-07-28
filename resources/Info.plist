@@ -37,8 +37,6 @@
 					<key>Primary</key>
 					<string>Ψ̲</string>
 				</dict>
-				<key>tsInputModeAlternateMenuIconFileKey</key>
-				<string>rime_palette.tiff</string>
 				<key>tsInputModeCharacterRepertoireKey</key>
 				<array>
 					<string>Hans</string>
@@ -70,8 +68,6 @@
 					<key>Primary</key>
 					<string>Ψ̲</string>
 				</dict>
-				<key>tsInputModeAlternateMenuIconFileKey</key>
-				<string>rime_palette.tiff</string>
 				<key>tsInputModeCharacterRepertoireKey</key>
 				<array>
 					<string>Hant</string>
