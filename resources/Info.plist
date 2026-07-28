@@ -35,7 +35,7 @@
 				<key>TISIconLabels</key>
 				<dict>
 					<key>Primary</key>
-					<string>Ψ̲</string>
+					<string>Ψ</string>
 				</dict>
 				<key>tsInputModeAlternateMenuIconFileKey</key>
 				<string>rime_palette.tiff</string>
@@ -51,7 +51,7 @@
 				<key>tsInputModeKeyEquivalentModifiersKey</key>
 				<integer>4608</integer>
 				<key>tsInputModeMenuIconFileKey</key>
-				<string>rime.pdf</string>
+				<string>rime_palette.tiff</string>
 				<key>tsInputModePaletteIconFileKey</key>
 				<string>rime_palette.tiff</string>
 				<key>tsInputModePrimaryInScriptKey</key>
@@ -68,7 +68,7 @@
 				<key>TISIconLabels</key>
 				<dict>
 					<key>Primary</key>
-					<string>Ψ̲</string>
+					<string>Ψ</string>
 				</dict>
 				<key>tsInputModeAlternateMenuIconFileKey</key>
 				<string>rime_palette.tiff</string>
@@ -84,7 +84,7 @@
 				<key>tsInputModeKeyEquivalentModifiersKey</key>
 				<integer>4608</integer>
 				<key>tsInputModeMenuIconFileKey</key>
-				<string>rime.pdf</string>
+				<string>rime_palette.tiff</string>
 				<key>tsInputModePaletteIconFileKey</key>
 				<string>rime_palette.tiff</string>
 				<key>tsInputModePrimaryInScriptKey</key>
