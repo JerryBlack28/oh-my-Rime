@@ -165,6 +165,10 @@ final class SquirrelInputController: IMKInputController {
        let localTarget = panel.localPageTarget(up: up) {
       handled = rimeAPI.highlight_candidate_on_current_page(session, localTarget)
     } else {
+      // librime preserves the highlighted offset when changing its larger
+      // backing page. Reset it so the next visual group starts at candidate 1
+      // instead of appearing to skip the beginning of that page.
+      _ = rimeAPI.highlight_candidate_on_current_page(session, 0)
       handled = rimeAPI.change_page(session, up)
     }
     if handled {
