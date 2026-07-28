@@ -32,6 +32,7 @@ final class SquirrelPanel: NSPanel {
   private var page: Int = 0
   private var lastPage: Bool = true
   private var pagingUp: Bool?
+  private var visibleCandidateRange: Range<Int> = 0..<0
 
   init(position: NSRect) {
     self.position = position
@@ -77,8 +78,8 @@ final class SquirrelPanel: NSPanel {
       } else {
         self.pagingUp = nil
       }
-      if let index, index >= 0 && index < candidates.count {
-        self.index = index
+      if let index, let candidateIndex = candidateIndex(forVisibleIndex: index) {
+        self.index = candidateIndex
       }
     case .leftMouseUp:
       let (index, preeditIndex, pagingUp) = view.click(at: mousePosition())
@@ -95,7 +96,9 @@ final class SquirrelPanel: NSPanel {
           _ = inputController?.moveCaret(forward: false)
         }
       }
-      if let index, index == self.index && index >= 0 && index < candidates.count {
+      if let index,
+         let candidateIndex = candidateIndex(forVisibleIndex: index),
+         candidateIndex == self.index {
         _ = inputController?.selectCandidate(index)
       }
     case .mouseEntered:
@@ -108,8 +111,10 @@ final class SquirrelPanel: NSPanel {
       pagingUp = nil
     case .mouseMoved:
       let (index, _, _) = view.click(at: mousePosition())
-      if let index = index, cursorIndex != index && index >= 0 && index < candidates.count {
-        update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments, labels: labels, highlighted: index, page: page, lastPage: lastPage, update: false)
+      if let index,
+         let candidateIndex = candidateIndex(forVisibleIndex: index),
+         cursorIndex != candidateIndex {
+        update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments, labels: labels, highlighted: candidateIndex, page: page, lastPage: lastPage, update: false)
       }
     case .scrollWheel:
       if event.phase == .began {
@@ -170,6 +175,14 @@ final class SquirrelPanel: NSPanel {
     }
     cursorIndex = index
 
+    let pageRanges = candidatePageRanges(candidates: candidates, comments: comments, labels: labels)
+    let selectedRange = pageRanges.first(where: { $0.contains(index) }) ?? pageRanges.first ?? 0..<0
+    visibleCandidateRange = selectedRange
+    let displayedCandidates = Array(candidates[selectedRange])
+    let displayedComments = Array(comments[selectedRange])
+    let displayedLabels = Array(labels.prefix(displayedCandidates.count))
+    let displayedIndex = selectedRange.contains(index) ? index - selectedRange.lowerBound : 0
+
     if !candidates.isEmpty || !preedit.isEmpty {
       statusMessage = ""
       statusTimer?.invalidate()
@@ -212,17 +225,17 @@ final class SquirrelPanel: NSPanel {
 
     // candidates
     var candidateRanges = [NSRange]()
-    for i in 0..<candidates.count {
-      let attrs = i == index ? theme.highlightedAttrs : theme.attrs
-      let labelAttrs = i == index ? theme.labelHighlightedAttrs : theme.labelAttrs
-      let commentAttrs = i == index ? theme.commentHighlightedAttrs : theme.commentAttrs
+    for i in 0..<displayedCandidates.count {
+      let attrs = i == displayedIndex ? theme.highlightedAttrs : theme.attrs
+      let labelAttrs = i == displayedIndex ? theme.labelHighlightedAttrs : theme.labelAttrs
+      let commentAttrs = i == displayedIndex ? theme.commentHighlightedAttrs : theme.commentAttrs
 
       let label = if theme.candidateFormat.contains(/\[label\]/) {
-        if labels.count > 1 && i < labels.count {
-          labels[i]
-        } else if labels.count == 1 && i < labels.first!.count {
+        if displayedLabels.count > 1 && i < displayedLabels.count {
+          displayedLabels[i]
+        } else if displayedLabels.count == 1 && i < displayedLabels.first!.count {
           // custom: A. B. C...
-          String(labels.first![labels.first!.index(labels.first!.startIndex, offsetBy: i)])
+          String(displayedLabels.first![displayedLabels.first!.index(displayedLabels.first!.startIndex, offsetBy: i)])
         } else {
           // default: 1. 2. 3...
           "\(i+1)"
@@ -231,8 +244,8 @@ final class SquirrelPanel: NSPanel {
         ""
       }
 
-      let candidate = candidates[i].precomposedStringWithCanonicalMapping
-      let comment = comments[i].precomposedStringWithCanonicalMapping
+      let candidate = displayedCandidates[i].precomposedStringWithCanonicalMapping
+      let comment = displayedComments[i].precomposedStringWithCanonicalMapping
 
       let line = NSMutableAttributedString(string: theme.candidateFormat, attributes: labelAttrs)
       for range in line.string.ranges(of: /\[candidate\]/) {
@@ -283,8 +296,32 @@ final class SquirrelPanel: NSPanel {
     // text done!
     view.textView.textContentStorage?.attributedString = text
     view.textView.setLayoutOrientation(vertical ? .vertical : .horizontal)
-    view.drawView(candidateRanges: candidateRanges, hilightedIndex: index, preeditRange: preeditRange, highlightedPreeditRange: highlightedPreeditRange, canPageUp: page > 0, canPageDown: !lastPage)
+    view.drawView(
+      candidateRanges: candidateRanges,
+      hilightedIndex: displayedIndex,
+      preeditRange: preeditRange,
+      highlightedPreeditRange: highlightedPreeditRange,
+      canPageUp: page > 0 || selectedRange.lowerBound > 0,
+      canPageDown: !lastPage || selectedRange.upperBound < candidates.count
+    )
     show()
+  }
+
+  var visibleCandidateCount: Int {
+    visibleCandidateRange.count
+  }
+
+  func candidateIndex(forVisibleIndex index: Int) -> Int? {
+    guard index >= 0 && index < visibleCandidateRange.count else { return nil }
+    return visibleCandidateRange.lowerBound + index
+  }
+
+  func localPageTarget(up: Bool) -> Int? {
+    let ranges = candidatePageRanges(candidates: candidates, comments: comments, labels: labels)
+    guard let current = ranges.firstIndex(of: visibleCandidateRange) else { return nil }
+    let target = up ? current - 1 : current + 1
+    guard target >= 0 && target < ranges.count else { return nil }
+    return ranges[target].lowerBound
   }
 
   func updateStatus(long longMessage: String, short shortMessage: String) {
@@ -344,6 +381,71 @@ private extension SquirrelPanel {
       screenRect.width * textWidthRatio - theme.edgeInset.width * 2
     }
     return maxWidth
+  }
+
+  func candidatePageRanges(candidates: [String], comments: [String], labels: [String]) -> [Range<Int>] {
+    guard !candidates.isEmpty else { return [] }
+    let theme = view.currentTheme
+    guard theme.linear && theme.candidateWindowWidth > 0 else {
+      return [0..<candidates.count]
+    }
+
+    let availableWidth = max(
+      1,
+      theme.candidateWindowWidth - theme.edgeInset.width * 2 - theme.pagingOffset
+    )
+    let separatorWidth = NSAttributedString(string: "  ", attributes: theme.attrs)
+      .boundingRect(with: NSSize(width: 10_000, height: 100), options: [.usesLineFragmentOrigin, .usesFontLeading])
+      .width
+
+    func label(at index: Int) -> String {
+      guard theme.candidateFormat.contains(/\[label\]/) else { return "" }
+      if labels.count > 1 && index < labels.count {
+        return labels[index]
+      }
+      if labels.count == 1 && index < labels[0].count {
+        return String(labels[0][labels[0].index(labels[0].startIndex, offsetBy: index)])
+      }
+      return "\(index + 1)"
+    }
+
+    func width(at index: Int) -> CGFloat {
+      let candidate = candidates[index].precomposedStringWithCanonicalMapping
+      let comment = comments[index].precomposedStringWithCanonicalMapping
+      let line = NSMutableAttributedString(string: theme.candidateFormat, attributes: theme.labelAttrs)
+      for range in line.string.ranges(of: /\[candidate\]/) {
+        line.addAttributes(theme.attrs, range: convert(range: range, in: line.string))
+      }
+      for range in line.string.ranges(of: /\[comment\]/) {
+        line.addAttributes(theme.commentAttrs, range: convert(range: range, in: line.string))
+      }
+      line.mutableString.replaceOccurrences(of: "[label]", with: label(at: index), range: NSRange(location: 0, length: line.length))
+      line.mutableString.replaceOccurrences(of: "[candidate]", with: candidate, range: NSRange(location: 0, length: line.length))
+      line.mutableString.replaceOccurrences(of: "[comment]", with: comment, range: NSRange(location: 0, length: line.length))
+      return ceil(
+        line.boundingRect(
+          with: NSSize(width: 10_000, height: 100),
+          options: [.usesLineFragmentOrigin, .usesFontLeading]
+        ).width
+      )
+    }
+
+    var ranges = [Range<Int>]()
+    var start = 0
+    var lineWidth: CGFloat = 0
+    for index in candidates.indices {
+      let candidateWidth = width(at: index)
+      let requiredWidth = candidateWidth + (index == start ? 0 : separatorWidth)
+      if index > start && lineWidth + requiredWidth > availableWidth {
+        ranges.append(start..<index)
+        start = index
+        lineWidth = candidateWidth
+      } else {
+        lineWidth += requiredWidth
+      }
+    }
+    ranges.append(start..<candidates.count)
+    return ranges
   }
 
   // Get the window size, the windows will be the dirtyRect in

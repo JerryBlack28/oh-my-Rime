@@ -106,6 +106,29 @@ final class SquirrelInputController: IMKInputController {
       }
       // print("[DEBUG] KEYDOWN client: \(sender ?? "nil"), modifiers: \(modifiers), keyCode: \(keyCode), keyChars: [\(keyChars ?? "empty")]")
 
+      // The native-width candidate window can contain a different number of
+      // candidates on each visual page. Handle paging and numeric selection
+      // here so they map back to the corresponding librime page index.
+      if keyCode == 116 || keyCode == 121 {
+        handled = page(up: keyCode == 116)
+        if handled {
+          break
+        }
+      }
+      if modifiers.intersection([.command, .control, .option, .shift]).isEmpty,
+         let char = keyChars?.first,
+         let number = Int(String(char)),
+         number >= 1,
+         number <= 9,
+         let panel = NSApp.squirrelAppDelegate.panel,
+         panel.isVisible,
+         number <= panel.visibleCandidateCount {
+        handled = selectCandidate(number - 1)
+        if handled {
+          break
+        }
+      }
+
       // translate osx keyevents to rime keyevents
       if let char = keyChars?.first {
         let rimeKeycode = SquirrelKeycode.osxKeycodeToRime(keycode: keyCode, keychar: char,
@@ -126,7 +149,8 @@ final class SquirrelInputController: IMKInputController {
   }
 
   func selectCandidate(_ index: Int) -> Bool {
-    let success = rimeAPI.select_candidate_on_current_page(session, index)
+    let candidateIndex = NSApp.squirrelAppDelegate.panel?.candidateIndex(forVisibleIndex: index) ?? index
+    let success = rimeAPI.select_candidate_on_current_page(session, candidateIndex)
     if success {
       rimeUpdate()
     }
@@ -136,7 +160,13 @@ final class SquirrelInputController: IMKInputController {
   // swiftlint:disable:next identifier_name
   func page(up: Bool) -> Bool {
     var handled = false
-    handled = rimeAPI.change_page(session, up)
+    if let panel = NSApp.squirrelAppDelegate.panel,
+       panel.isVisible,
+       let localTarget = panel.localPageTarget(up: up) {
+      handled = rimeAPI.highlight_candidate_on_current_page(session, localTarget)
+    } else {
+      handled = rimeAPI.change_page(session, up)
+    }
     if handled {
       rimeUpdate()
     }
