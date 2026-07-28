@@ -398,18 +398,18 @@ private extension SquirrelPanel {
       .boundingRect(with: NSSize(width: 10_000, height: 100), options: [.usesLineFragmentOrigin, .usesFontLeading])
       .width
 
-    func label(at index: Int) -> String {
+    func label(at visibleIndex: Int) -> String {
       guard theme.candidateFormat.contains(/\[label\]/) else { return "" }
-      if labels.count > 1 && index < labels.count {
-        return labels[index]
+      if labels.count > 1 && visibleIndex < labels.count {
+        return labels[visibleIndex]
       }
-      if labels.count == 1 && index < labels[0].count {
-        return String(labels[0][labels[0].index(labels[0].startIndex, offsetBy: index)])
+      if labels.count == 1 && visibleIndex < labels[0].count {
+        return String(labels[0][labels[0].index(labels[0].startIndex, offsetBy: visibleIndex)])
       }
-      return "\(index + 1)"
+      return "\(visibleIndex + 1)"
     }
 
-    func width(at index: Int) -> CGFloat {
+    func width(at index: Int, visibleIndex: Int) -> CGFloat {
       let candidate = candidates[index].precomposedStringWithCanonicalMapping
       let comment = comments[index].precomposedStringWithCanonicalMapping
       let line = NSMutableAttributedString(string: theme.candidateFormat, attributes: theme.labelAttrs)
@@ -419,7 +419,7 @@ private extension SquirrelPanel {
       for range in line.string.ranges(of: /\[comment\]/) {
         line.addAttributes(theme.commentAttrs, range: convert(range: range, in: line.string))
       }
-      line.mutableString.replaceOccurrences(of: "[label]", with: label(at: index), range: NSRange(location: 0, length: line.length))
+      line.mutableString.replaceOccurrences(of: "[label]", with: label(at: visibleIndex), range: NSRange(location: 0, length: line.length))
       line.mutableString.replaceOccurrences(of: "[candidate]", with: candidate, range: NSRange(location: 0, length: line.length))
       line.mutableString.replaceOccurrences(of: "[comment]", with: comment, range: NSRange(location: 0, length: line.length))
       return ceil(
@@ -434,7 +434,7 @@ private extension SquirrelPanel {
     var start = 0
     var lineWidth: CGFloat = 0
     for index in candidates.indices {
-      let candidateWidth = width(at: index)
+      let candidateWidth = width(at: index, visibleIndex: index - start)
       let requiredWidth = candidateWidth + (index == start ? 0 : separatorWidth)
       if index > start && lineWidth + requiredWidth > availableWidth {
         ranges.append(start..<index)
