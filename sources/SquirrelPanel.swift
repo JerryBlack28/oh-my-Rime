@@ -7,9 +7,79 @@
 
 import AppKit
 
+private final class SquirrelExpandedFooterView: NSView {
+  static let height = SquirrelView.expandedFooterHeight
+  private let labels = ["词频", "部首", "笔画", "表情", "拆字"]
+
+  override func hitTest(_ point: NSPoint) -> NSView? {
+    nil
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    super.draw(dirtyRect)
+
+    let topSeparator = NSBezierPath()
+    topSeparator.move(to: NSPoint(x: bounds.minX, y: bounds.maxY - 0.25))
+    topSeparator.line(to: NSPoint(x: bounds.maxX, y: bounds.maxY - 0.25))
+    NSColor.separatorColor.withAlphaComponent(0.16).setStroke()
+    topSeparator.lineWidth = 0.5
+    topSeparator.stroke()
+
+    let controlWidth = min(300, bounds.width - 40)
+    let controlRect = NSRect(
+      x: bounds.midX - controlWidth / 2,
+      y: 7.5,
+      width: controlWidth,
+      height: 24
+    )
+    let segmentWidth = controlRect.width / CGFloat(labels.count)
+    let controlPath = NSBezierPath(roundedRect: controlRect, xRadius: 7, yRadius: 7)
+    NSColor(calibratedWhite: 0.91, alpha: 0.96).setFill()
+    controlPath.fill()
+
+    let selectedRect = NSRect(
+      x: controlRect.minX,
+      y: controlRect.minY,
+      width: segmentWidth,
+      height: controlRect.height
+    )
+    let selectedPath = NSBezierPath(roundedRect: selectedRect, xRadius: 7, yRadius: 7)
+    NSColor(calibratedWhite: 0.78, alpha: 0.82).setFill()
+    selectedPath.fill()
+
+    NSColor.separatorColor.withAlphaComponent(0.28).setStroke()
+    for segment in 1..<labels.count {
+      let x = controlRect.minX + CGFloat(segment) * segmentWidth
+      let separator = NSBezierPath()
+      separator.move(to: NSPoint(x: x, y: controlRect.minY + 4))
+      separator.line(to: NSPoint(x: x, y: controlRect.maxY - 4))
+      separator.lineWidth = 0.5
+      separator.stroke()
+    }
+
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.alignment = .center
+    let attributes: [NSAttributedString.Key: Any] = [
+      .font: NSFont.systemFont(ofSize: 15, weight: .medium),
+      .foregroundColor: NSColor.labelColor,
+      .paragraphStyle: paragraph
+    ]
+    for (index, label) in labels.enumerated() {
+      let labelRect = NSRect(
+        x: controlRect.minX + CGFloat(index) * segmentWidth,
+        y: controlRect.minY + 2,
+        width: segmentWidth,
+        height: controlRect.height - 4
+      )
+      (label as NSString).draw(in: labelRect, withAttributes: attributes)
+    }
+  }
+}
+
 final class SquirrelPanel: NSPanel {
   private let view: SquirrelView
   private let back: NSVisualEffectView
+  private let expandedFooter: SquirrelExpandedFooterView
   var inputController: SquirrelInputController?
 
   var position: NSRect
@@ -41,6 +111,7 @@ final class SquirrelPanel: NSPanel {
     self.position = position
     self.view = SquirrelView(frame: position)
     self.back = NSVisualEffectView()
+    self.expandedFooter = SquirrelExpandedFooterView()
     super.init(contentRect: position, styleMask: .nonactivatingPanel, backing: .buffered, defer: true)
     self.level = .init(Int(CGShieldingWindowLevel()))
     self.hasShadow = true
@@ -55,6 +126,8 @@ final class SquirrelPanel: NSPanel {
     contentView.addSubview(back)
     contentView.addSubview(view)
     contentView.addSubview(view.textView)
+    contentView.addSubview(expandedFooter)
+    expandedFooter.isHidden = true
     self.contentView = contentView
   }
 
@@ -249,12 +322,12 @@ final class SquirrelPanel: NSPanel {
       {
         let style = theme.paragraphStyle.mutableCopy() as! NSMutableParagraphStyle
         let availableWidth = max(1, theme.candidateWindowWidth - theme.edgeInset.width * 2)
-        let columnWidth = availableWidth / 6
+        let columnWidth = min(61, availableWidth / 6)
         style.tabStops = (1...5).map {
           NSTextTab(textAlignment: .left, location: columnWidth * CGFloat($0), options: [:])
         }
         style.defaultTabInterval = columnWidth
-        style.lineSpacing = 7
+        style.lineSpacing = 10
         style.paragraphSpacing = 0
         style.paragraphSpacingBefore = 0
         return style
@@ -542,7 +615,7 @@ private extension SquirrelPanel {
     let theme = view.currentTheme
     let columnCount = 6
     let availableWidth = max(1, theme.candidateWindowWidth - theme.edgeInset.width * 2)
-    let columnWidth = availableWidth / CGFloat(columnCount)
+    let columnWidth = min(61, availableWidth / CGFloat(columnCount))
 
     func candidateWidth(at index: Int) -> CGFloat {
       let candidate = candidates[index].precomposedStringWithCanonicalMapping
@@ -599,6 +672,7 @@ private extension SquirrelPanel {
     let textWidth = maxTextWidth()
     let maxTextHeight = vertical ? screenRect.width - theme.edgeInset.width * 2 : screenRect.height - theme.edgeInset.height * 2
     let pagingOffset = isExpanded ? 0 : theme.pagingOffset
+    let footerHeight = isExpanded ? SquirrelExpandedFooterView.height : 0
     let configuredTextWidth = if !vertical && theme.candidateWindowWidth > 0 {
       max(1, theme.candidateWindowWidth - theme.edgeInset.width * 2 - pagingOffset)
     } else {
@@ -640,7 +714,7 @@ private extension SquirrelPanel {
       let naturalWidth = contentRect.width + theme.edgeInset.width * 2 + pagingOffset
       let preferredWidth = theme.candidateWindowWidth > 0 ? theme.candidateWindowWidth : naturalWidth
       panelRect.size = NSSize(width: min(0.95 * screenRect.width, preferredWidth),
-                              height: min(0.95 * screenRect.height, contentRect.height + theme.edgeInset.height * 2))
+                              height: min(0.95 * screenRect.height, contentRect.height + theme.edgeInset.height * 2 + footerHeight))
       panelRect.origin = NSPoint(
         x: position.minX - pagingOffset * 0.6,
         y: position.minY - SquirrelTheme.offsetHeight - panelRect.height
@@ -681,7 +755,21 @@ private extension SquirrelPanel {
     view.frame = contentView!.bounds
     view.textView.frame = contentView!.bounds
     view.textView.frame.size.width -= pagingOffset
-    view.textView.textContainerInset = theme.edgeInset
+    var textContainerInset = theme.edgeInset
+    if isExpanded {
+      textContainerInset.width += 5
+    }
+    view.textView.textContainerInset = textContainerInset
+    expandedFooter.isHidden = !isExpanded
+    if isExpanded {
+      expandedFooter.frame = NSRect(
+        x: 0,
+        y: 0,
+        width: panelRect.width,
+        height: SquirrelExpandedFooterView.height
+      )
+      expandedFooter.needsDisplay = true
+    }
 
     if theme.translucency {
       back.frame = contentView!.bounds

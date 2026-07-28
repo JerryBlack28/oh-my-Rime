@@ -23,6 +23,7 @@ extension NSAttributedString.Key {
 }
 
 final class SquirrelView: NSView {
+  static let expandedFooterHeight: CGFloat = 41
   let textView: NSTextView
 
   private let squirrelLayoutDelegate: SquirrelLayoutDelegate
@@ -142,6 +143,11 @@ final class SquirrelView: NSView {
     var containingRect = dirtyRect
     containingRect.size.width -= isExpanded ? 0 : theme.pagingOffset
     let backgroundRect = dirtyRect
+    var candidateBackgroundRect = backgroundRect
+    if isExpanded {
+      candidateBackgroundRect.size.height -= Self.expandedFooterHeight
+      containingRect.size.height -= Self.expandedFooterHeight
+    }
 
     // Draw preedit Rect
     var preeditRect = NSRect.zero
@@ -167,12 +173,12 @@ final class SquirrelView: NSView {
       if i == hilightedIndex {
         // Draw highlighted Rect
         if candidate.length > 0 && theme.highlightedBackColor != nil {
-          highlightedPath = drawPath(highlightedRange: candidate, backgroundRect: backgroundRect, preeditRect: preeditRect, containingRect: containingRect, extraExpansion: 0)?.mutableCopy()
+          highlightedPath = drawPath(highlightedRange: candidate, backgroundRect: candidateBackgroundRect, preeditRect: preeditRect, containingRect: containingRect, extraExpansion: 0)?.mutableCopy()
         }
       } else {
         // Draw other highlighted Rect
         if candidate.length > 0 && theme.candidateBackColor != nil {
-          let candidatePath = drawPath(highlightedRange: candidate, backgroundRect: backgroundRect, preeditRect: preeditRect,
+          let candidatePath = drawPath(highlightedRange: candidate, backgroundRect: candidateBackgroundRect, preeditRect: preeditRect,
                                        containingRect: containingRect, extraExpansion: theme.surroundingExtraExpansion)
           if candidatePaths == nil {
             candidatePaths = CGMutablePath()
@@ -270,7 +276,7 @@ final class SquirrelView: NSView {
         }
         let separatorLayer = shapeFromPath(path: separatorPath)
         separatorLayer.fillColor = nil
-        separatorLayer.strokeColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+        separatorLayer.strokeColor = NSColor.separatorColor.withAlphaComponent(0.14).cgColor
         separatorLayer.lineWidth = 0.5
         panelLayer.addSublayer(separatorLayer)
       }

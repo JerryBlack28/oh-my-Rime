@@ -109,7 +109,10 @@ final class SquirrelInputController: IMKInputController {
       // The native-width candidate window can contain a different number of
       // candidates on each visual page. Handle paging and numeric selection
       // here so they map back to the corresponding librime page index.
-      if keyCode == 125 || keyChars?.first == "+" {
+      let isPlusKey = keyChars?.first == "+"
+        || keyCode == 69
+        || (keyCode == 24 && modifiers.contains(.shift))
+      if keyCode == 125 || isPlusKey {
         handled = expandOrMoveCandidatesDown()
         if handled {
           break
