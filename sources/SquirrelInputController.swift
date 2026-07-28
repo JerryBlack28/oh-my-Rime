@@ -642,7 +642,7 @@ private extension SquirrelInputController {
       let selRange = NSRange(location: start.utf16Offset(in: preedit), length: preedit.utf16.distance(from: start, to: end))
       showPanel(preedit: inlinePreedit ? "" : preedit, selRange: selRange, caretPos: caretPos.utf16Offset(in: preedit),
                 candidates: displayedCandidates, comments: displayedComments, labels: labels, candidateOffset: candidateOffset,
-                highlighted: selectedCandidate - candidateOffset, page: candidateOffset / pageSize, lastPage: displayedLastPage)
+                highlighted: selectedCandidate - candidateOffset, page: page, lastPage: displayedLastPage)
       _ = rimeAPI.free_context(&ctx)
     } else {
       hidePalettes()
