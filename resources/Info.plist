@@ -119,6 +119,8 @@
 	<string>ukvWq2dKOWn3B9AsdsQIwOptiDdDKdUjAVNgFxSvB2o=</string>
 	<key>TICapsLockLanguageSwitchCapable</key>
 	<true/>
+	<key>TISIconIsTemplate</key>
+	<true/>
 	<key>SUEnableInstallerLauncherService</key>
 	<true/>
 </dict>
