@@ -109,22 +109,6 @@ final class SquirrelInputController: IMKInputController {
       // The native-width candidate window can contain a different number of
       // candidates on each visual page. Handle paging and numeric selection
       // here so they map back to the corresponding librime page index.
-      if keyCode == 125 || keyChars?.first == "+" {
-        handled = expandOrMoveCandidatesDown()
-        if handled {
-          break
-        }
-      }
-      if keyCode == 126,
-         let panel = NSApp.squirrelAppDelegate.panel,
-         panel.isExpanded,
-         let localTarget = panel.expandedRowTarget(up: true) {
-        handled = rimeAPI.highlight_candidate_on_current_page(session, localTarget)
-        if handled {
-          rimeUpdate()
-          break
-        }
-      }
       if keyCode == 116 || keyCode == 121 {
         handled = page(up: keyCode == 116)
         if handled {
@@ -164,39 +148,13 @@ final class SquirrelInputController: IMKInputController {
     return handled
   }
 
-  func selectCandidate(_ index: Int, alreadyMapped: Bool = false) -> Bool {
-    let candidateIndex = alreadyMapped
-      ? index
-      : (NSApp.squirrelAppDelegate.panel?.candidateIndex(forVisibleIndex: index) ?? index)
+  func selectCandidate(_ index: Int) -> Bool {
+    let candidateIndex = NSApp.squirrelAppDelegate.panel?.candidateIndex(forVisibleIndex: index) ?? index
     let success = rimeAPI.select_candidate_on_current_page(session, candidateIndex)
     if success {
       rimeUpdate()
     }
     return success
-  }
-
-  func expandOrMoveCandidatesDown() -> Bool {
-    guard let panel = NSApp.squirrelAppDelegate.panel, panel.isVisible else {
-      return false
-    }
-    if panel.expandCandidates() {
-      return true
-    }
-    if let localTarget = panel.expandedRowTarget(up: false) {
-      let handled = rimeAPI.highlight_candidate_on_current_page(session, localTarget)
-      if handled {
-        rimeUpdate()
-      }
-      return handled
-    }
-
-    // Continue with the next larger backing page after the final expanded row.
-    _ = rimeAPI.highlight_candidate_on_current_page(session, 0)
-    let handled = rimeAPI.change_page(session, false)
-    if handled {
-      rimeUpdate()
-    }
-    return handled
   }
 
   // swiftlint:disable:next identifier_name
