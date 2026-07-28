@@ -816,16 +816,16 @@ private extension SquirrelView {
     separatorPath.addLine(to: CGPoint(x: separatorX, y: bounds.maxY - separatorInset))
     let separatorLayer = shapeFromPath(path: separatorPath)
     separatorLayer.fillColor = nil
-    separatorLayer.strokeColor = NSColor.separatorColor.withAlphaComponent(0.55).cgColor
-    separatorLayer.lineWidth = 1
+    separatorLayer.strokeColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+    separatorLayer.lineWidth = 0.75
     layer.addSublayer(separatorLayer)
 
     func chevronPath(center: CGPoint, pointsDown: Bool) -> CGPath {
       let direction: CGFloat = pointsDown ? 1 : -1
       let path = CGMutablePath()
-      path.move(to: CGPoint(x: center.x - 5.5, y: center.y - 3 * direction))
-      path.addLine(to: CGPoint(x: center.x, y: center.y + 3 * direction))
-      path.addLine(to: CGPoint(x: center.x + 5.5, y: center.y - 3 * direction))
+      path.move(to: CGPoint(x: center.x - 4.25, y: center.y - 2.5 * direction))
+      path.addLine(to: CGPoint(x: center.x, y: center.y + 2.5 * direction))
+      path.addLine(to: CGPoint(x: center.x + 4.25, y: center.y - 2.5 * direction))
       return path
     }
 
@@ -833,7 +833,7 @@ private extension SquirrelView {
       let chevronLayer = shapeFromPath(path: path)
       chevronLayer.fillColor = nil
       chevronLayer.strokeColor = NSColor.tertiaryLabelColor.cgColor
-      chevronLayer.lineWidth = 2.5
+      chevronLayer.lineWidth = 1.75
       chevronLayer.lineCap = .round
       chevronLayer.lineJoin = .round
       layer.addSublayer(chevronLayer)
