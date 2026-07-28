@@ -32,8 +32,13 @@
 				<string>im.rime.inputmethod.Squirrel.Hans</string>
 				<key>TISIntendedLanguage</key>
 				<string>zh-Hans</string>
+				<key>TISIconLabels</key>
+				<dict>
+					<key>Primary</key>
+					<string>Ψ̲</string>
+				</dict>
 				<key>tsInputModeAlternateMenuIconFileKey</key>
-				<string>rime.pdf</string>
+				<string>rime_palette.tiff</string>
 				<key>tsInputModeCharacterRepertoireKey</key>
 				<array>
 					<string>Hans</string>
@@ -48,7 +53,7 @@
 				<key>tsInputModeMenuIconFileKey</key>
 				<string>rime.pdf</string>
 				<key>tsInputModePaletteIconFileKey</key>
-				<string>rime.pdf</string>
+				<string>rime_palette.tiff</string>
 				<key>tsInputModePrimaryInScriptKey</key>
 				<true/>
 				<key>tsInputModeScriptKey</key>
@@ -60,8 +65,13 @@
 				<string>im.rime.inputmethod.Squirrel.Hant</string>
 				<key>TISIntendedLanguage</key>
 				<string>zh-Hant</string>
+				<key>TISIconLabels</key>
+				<dict>
+					<key>Primary</key>
+					<string>Ψ̲</string>
+				</dict>
 				<key>tsInputModeAlternateMenuIconFileKey</key>
-				<string>rime.pdf</string>
+				<string>rime_palette.tiff</string>
 				<key>tsInputModeCharacterRepertoireKey</key>
 				<array>
 					<string>Hant</string>
@@ -76,7 +86,7 @@
 				<key>tsInputModeMenuIconFileKey</key>
 				<string>rime.pdf</string>
 				<key>tsInputModePaletteIconFileKey</key>
-				<string>rime.pdf</string>
+				<string>rime_palette.tiff</string>
 				<key>tsInputModePrimaryInScriptKey</key>
 				<true/>
 				<key>tsInputModeScriptKey</key>
