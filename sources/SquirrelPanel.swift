@@ -190,6 +190,14 @@ final class SquirrelPanel: NSPanel {
     return target
   }
 
+  func deactivateAppleGrid() {
+    guard appleGridMode else { return }
+    appleGridMode = false
+    appleGrid.isHidden = true
+    update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments,
+           labels: labels, candidateOffset: candidateOffset, highlighted: index, page: page, lastPage: lastPage, update: false)
+  }
+
   // Main function to add attributes to text output from librime
   // swiftlint:disable:next cyclomatic_complexity function_parameter_count
   func update(preedit: String, selRange: NSRange, caretPos: Int, candidates: [String], comments: [String], labels: [String], candidateOffset: Int, highlighted index: Int, page: Int, lastPage: Bool, update: Bool) {
@@ -728,7 +736,9 @@ private final class AppleCandidateGridView: NSView {
   static let columnCount = 6
   static let rowCount = 5
   static let visibleCount = columnCount * rowCount
-  static let preferredSize = NSSize(width: 800, height: 302)
+  // The reference images are Retina screenshots. AppKit sizes are in points,
+  // so these values are half of the captured pixel dimensions.
+  static let preferredSize = NSSize(width: 400, height: 151)
 
   private var candidates = [String]()
   private var absoluteStart = 0
@@ -745,7 +755,7 @@ private final class AppleCandidateGridView: NSView {
 
   override func draw(_ dirtyRect: NSRect) {
     let bounds = self.bounds.insetBy(dx: 0.5, dy: 0.5)
-    let cornerRadius = min(26, bounds.height / 10)
+    let cornerRadius = min(13, bounds.height / 10)
     let background = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
     NSColor(calibratedWhite: 0.975, alpha: 0.99).setFill()
     background.fill()
@@ -761,12 +771,12 @@ private final class AppleCandidateGridView: NSView {
       let line = NSBezierPath()
       line.move(to: NSPoint(x: bounds.minX, y: bounds.minY + CGFloat(row) * rowHeight))
       line.line(to: NSPoint(x: bounds.maxX, y: bounds.minY + CGFloat(row) * rowHeight))
-      line.lineWidth = 0.75
+      line.lineWidth = 0.5
       line.stroke()
     }
 
-    let textFont = NSFont(name: "PingFang SC", size: 28) ?? .systemFont(ofSize: 28, weight: .regular)
-    let labelFont = NSFont.systemFont(ofSize: 16, weight: .regular)
+    let textFont = NSFont(name: "PingFangSC-Regular", size: 14) ?? .systemFont(ofSize: 14, weight: .regular)
+    let labelFont = NSFont.systemFont(ofSize: 8, weight: .regular)
     let normalAttributes: [NSAttributedString.Key: Any] = [
       .font: textFont,
       .foregroundColor: NSColor(calibratedWhite: 0.13, alpha: 1)
@@ -796,24 +806,24 @@ private final class AppleCandidateGridView: NSView {
       let candidateAttributes = isHighlighted ? highlightedAttributes : normalAttributes
       let candidateSize = (candidate as NSString).size(withAttributes: candidateAttributes)
 
-      var candidateX = cellX + 23
+      var candidateX = cellX + 11.5
       if isActiveRow {
         let label = "\(column + 1)"
         let labelAttributes = isHighlighted ? highlightedLabelAttributes : labelAttributes
         if isHighlighted {
-          let pillWidth = min(columnWidth - 10, max(112, candidateSize.width + 44))
+          let pillWidth = min(columnWidth - 5, max(56, candidateSize.width + 22))
           let pill = NSBezierPath(
-            roundedRect: NSRect(x: cellX + 6, y: cellY + 6, width: pillWidth, height: rowHeight - 12),
-            xRadius: (rowHeight - 12) / 2,
-            yRadius: (rowHeight - 12) / 2
+            roundedRect: NSRect(x: cellX + 3, y: cellY + 3, width: pillWidth, height: rowHeight - 6),
+            xRadius: (rowHeight - 6) / 2,
+            yRadius: (rowHeight - 6) / 2
           )
           NSColor.systemBlue.setFill()
           pill.fill()
         }
-        (label as NSString).draw(at: NSPoint(x: cellX + 11, y: cellY + 19), withAttributes: labelAttributes)
-        candidateX = cellX + 31
+        (label as NSString).draw(at: NSPoint(x: cellX + 5.5, y: cellY + 9.5), withAttributes: labelAttributes)
+        candidateX = cellX + 15.5
       }
-      (candidate as NSString).draw(at: NSPoint(x: candidateX, y: cellY + 11), withAttributes: candidateAttributes)
+      (candidate as NSString).draw(at: NSPoint(x: candidateX, y: cellY + 5.5), withAttributes: candidateAttributes)
     }
   }
 }

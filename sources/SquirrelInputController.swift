@@ -216,7 +216,13 @@ final class SquirrelInputController: IMKInputController {
       return panel.activateAppleGrid()
     }
 
-    guard let target = panel.appleGridTarget(up: up) else { return false }
+    guard let target = panel.appleGridTarget(up: up) else {
+      if up {
+        panel.deactivateAppleGrid()
+        return true
+      }
+      return false
+    }
     let handled = rimeAPI.highlight_candidate(session, panel.absoluteCandidateIndex(forLocalIndex: target))
     if handled {
       rimeUpdate()
