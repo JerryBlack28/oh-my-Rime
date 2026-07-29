@@ -130,6 +130,13 @@ final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
     )
   }
 
+  func ensurePasteAccessibility() -> Bool {
+    guard !AXIsProcessTrusted() else { return true }
+    let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+    _ = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
+    return false
+  }
+
   static func showMessage(msgText: String?) {
     let center = UNUserNotificationCenter.current()
     center.requestAuthorization(options: [.alert, .provisional]) { _, error in
@@ -277,7 +284,7 @@ private extension SquirrelApplicationDelegate {
     }
 
     globalClipboardTargetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
-    requestPasteAccessibility()
+    _ = ensurePasteAccessibility()
 
     panel.position = clipboardPanelAnchor()
     panel.inputController = nil
@@ -308,15 +315,8 @@ private extension SquirrelApplicationDelegate {
     postGlobalPasteShortcut(to: targetPID)
   }
 
-  func requestPasteAccessibility() {
-    guard !AXIsProcessTrusted() else { return }
-    let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-    _ = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
-  }
-
   func postGlobalPasteShortcut(to targetPID: pid_t?) {
-    guard AXIsProcessTrusted() else {
-      requestPasteAccessibility()
+    guard ensurePasteAccessibility() else {
       NSSound.beep()
       return
     }

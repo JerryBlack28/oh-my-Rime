@@ -248,6 +248,10 @@ final class SquirrelInputController: IMKInputController {
       commit(string: text)
       return true
     case .image, .files:
+      guard NSApp.squirrelAppDelegate.ensurePasteAccessibility() else {
+        NSSound.beep()
+        return false
+      }
       guard NSApp.squirrelAppDelegate.clipboardHistory.restore(entry) else {
         NSSound.beep()
         return false
