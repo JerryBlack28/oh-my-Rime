@@ -71,7 +71,7 @@ final class GlobalClipboardHotkey {
     let hotKeyID = EventHotKeyID(signature: Self.signature, id: ClipboardHotkeyAction.open.rawValue)
     let registerStatus = RegisterEventHotKey(
       UInt32(kVK_ANSI_V),
-      UInt32(controlKey | shiftKey),
+      UInt32(optionKey),
       hotKeyID,
       GetApplicationEventTarget(),
       0,

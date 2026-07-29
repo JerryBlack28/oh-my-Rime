@@ -59,7 +59,7 @@ final class SquirrelInputController: IMKInputController {
       updateAppOptions()
     }
 
-    // Once the clipboard palette is open, releasing Control/Shift must not be
+    // Once the clipboard palette is open, releasing the shortcut modifier must not be
     // forwarded to Rime. Its normal no-composition update would hide the
     // palette immediately after the shortcut keys are released.
     if event.type == .flagsChanged,
@@ -107,7 +107,7 @@ final class SquirrelInputController: IMKInputController {
 
     case .keyDown:
       let shortcutModifiers = modifiers.intersection([.command, .control, .option, .shift])
-      if event.keyCode == UInt16(kVK_ANSI_V), shortcutModifiers == [.control, .shift] {
+      if event.keyCode == UInt16(kVK_ANSI_V), shortcutModifiers == [.option] {
         handled = showClipboardHistory(client: sender)
         break
       }
@@ -467,7 +467,7 @@ final class SquirrelInputController: IMKInputController {
     sync.target = self
     let clipboard = NSMenuItem(title: "剪贴板历史…", action: #selector(openClipboardHistory), keyEquivalent: "v")
     clipboard.target = self
-    clipboard.keyEquivalentModifierMask = [.control, .shift]
+    clipboard.keyEquivalentModifierMask = [.option]
     let adaptiveRanking = NSMenuItem(
       title: NSApp.squirrelAppDelegate.candidateReranker.hasSemanticModel
         ? "智能候选排序（上下文模型已加载）"
