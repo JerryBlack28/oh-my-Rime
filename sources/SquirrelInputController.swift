@@ -950,10 +950,19 @@ private extension SquirrelInputController {
     guard rimeAPI.get_context(session, &ctx) else {
       return input
     }
-    // `preedit` contains Rime's display-only syllable separators.  Compose
-    // confirmed text with the raw buffer instead so `dnys` stays contiguous.
-    let confirmed = ctx.commit_text_preview.map { String(cString: $0) } ?? ""
-    return confirmed + input
+    // `commit_text_preview` includes the current highlighted prediction.
+    // Only the preedit prefix before `sel_start` consists of segments the
+    // user has actually selected; the remaining raw buffer stays contiguous.
+    let preedit = ctx.composition.preedit.map { String(cString: $0) } ?? ""
+    let selectedLength = min(max(0, Int(ctx.composition.sel_start)), preedit.utf8.count)
+    guard selectedLength > 0,
+          let selectedEnd = String.Index(
+            preedit.utf8.index(preedit.utf8.startIndex, offsetBy: selectedLength),
+            within: preedit
+          ) else {
+      return input
+    }
+    return String(preedit[..<selectedEnd]) + input
   }
 
   private func showClipboardHistory(client sender: Any!) -> Bool {
