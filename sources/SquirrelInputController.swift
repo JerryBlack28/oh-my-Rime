@@ -213,7 +213,7 @@ final class SquirrelInputController: IMKInputController {
     guard let panel = NSApp.squirrelAppDelegate.panel, panel.isVisible else { return false }
 
     if !panel.appleGridMode {
-      return panel.activateAppleGrid()
+      return up ? false : panel.activateAppleGrid()
     }
 
     guard let target = panel.appleGridTarget(up: up) else {
