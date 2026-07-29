@@ -193,6 +193,13 @@ final class SquirrelPanel: NSPanel {
     return target.candidateIndex
   }
 
+  func appleGridPageTarget(up: Bool) -> Int? {
+    guard appleGridMode else { return nil }
+    guard let target = appleGrid.pageTarget(up: up) else { return nil }
+    appleGridStartRow = target.visibleStartRow
+    return target.candidateIndex
+  }
+
   func deactivateAppleGrid() {
     guard appleGridMode else { return }
     appleGridMode = false
@@ -814,6 +821,25 @@ private final class AppleCandidateGridView: NSView {
       nextStart += 1
     }
     return (target.candidateIndex, nextStart)
+  }
+
+  func pageTarget(up: Bool) -> (candidateIndex: Int, visibleStartRow: Int)? {
+    guard let selected = cells.first(where: { $0.candidateIndex == highlightedIndex }),
+          let finalRow = cells.last?.row else {
+      return nil
+    }
+
+    let pageRowCount = Self.rowCount
+    let targetStartRow = visibleStartRow + (up ? -pageRowCount : pageRowCount)
+    guard targetStartRow >= 0, targetStartRow <= finalRow else { return nil }
+
+    let selectedRowOffset = max(0, min(pageRowCount - 1, selected.row - visibleStartRow))
+    let targetLastRow = min(finalRow, targetStartRow + pageRowCount - 1)
+    let targetRow = min(targetStartRow + selectedRowOffset, targetLastRow)
+    let rowCells = cells.filter { $0.row == targetRow }
+    guard let lastCell = rowCells.last else { return nil }
+    let target = rowCells.first(where: { $0.orderInRow == selected.orderInRow }) ?? lastCell
+    return (target.candidateIndex, targetStartRow)
   }
 
   override func draw(_ dirtyRect: NSRect) {

@@ -127,7 +127,7 @@ final class SquirrelInputController: IMKInputController {
         }
       }
       if hasOnlyCapsLock, pageUpKeys.contains(keyCode) || pageDownKeys.contains(keyCode) {
-        handled = page(up: pageUpKeys.contains(keyCode))
+        handled = appleGridVisualPage(up: pageUpKeys.contains(keyCode))
         if handled {
           break
         }
@@ -245,6 +245,25 @@ final class SquirrelInputController: IMKInputController {
     let handled = rimeAPI.highlight_candidate(session, panel.absoluteCandidateIndex(forLocalIndex: target))
     if handled {
       panel.prepareAppleGridForKeyboardNavigation()
+      rimeUpdate()
+    }
+    return handled
+  }
+
+  private func appleGridVisualPage(up: Bool) -> Bool {
+    guard let panel = NSApp.squirrelAppDelegate.panel, panel.isVisible else { return false }
+
+    if !panel.appleGridMode {
+      return up ? page(up: true) : panel.activateAppleGrid()
+    }
+
+    guard let target = panel.appleGridPageTarget(up: up) else {
+      // Consume the key at the first/last grid page instead of passing it to
+      // librime and unexpectedly changing its backing page.
+      return true
+    }
+    let handled = rimeAPI.highlight_candidate(session, panel.absoluteCandidateIndex(forLocalIndex: target))
+    if handled {
       rimeUpdate()
     }
     return handled
