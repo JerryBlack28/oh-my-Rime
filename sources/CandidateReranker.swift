@@ -21,6 +21,7 @@ final class CandidateReranker {
 
   private let fileManager = FileManager.default
   private let modelURL: URL
+  private(set) var hasSemanticModel = false
   private var model = Model()
   private var saveTimer: Timer?
   private(set) var isEnabled: Bool
@@ -36,6 +37,7 @@ final class CandidateReranker {
     } else {
       isEnabled = UserDefaults.standard.bool(forKey: "adaptive_candidate_ranking")
     }
+    loadSemanticModel()
     load()
   }
 
@@ -60,6 +62,12 @@ final class CandidateReranker {
       if let date = model.recentSelections[candidateID] {
         let age = max(0, Date.now.timeIntervalSince(date))
         adaptiveScore += 0.35 * exp(-age / (24 * 60 * 60))
+      }
+      if let semanticScore = semanticScore(
+        precedingText: precedingText,
+        candidate: candidate
+      ) {
+        adaptiveScore += semanticScore
       }
 
       // Rime's rank remains the prior. Learned evidence has to overcome a
@@ -94,6 +102,7 @@ final class CandidateReranker {
     saveTimer?.invalidate()
     saveTimer = nil
     save()
+    SquirrelGrammarUnload()
   }
 
   @discardableResult
@@ -105,6 +114,47 @@ final class CandidateReranker {
 }
 
 private extension CandidateReranker {
+  func loadSemanticModel() {
+    let appSupport = fileManager.urls(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask
+    ).first!
+    let candidates = [
+      fileManager.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Rime", isDirectory: true)
+        .appendingPathComponent("wanxiang-lts-zh-hans.gram"),
+      appSupport
+        .appendingPathComponent("Squirrel/Models", isDirectory: true)
+        .appendingPathComponent("wanxiang-lts-zh-hans.gram")
+    ]
+    guard let modelURL = candidates.first(where: {
+      fileManager.fileExists(atPath: $0.path)
+    }) else {
+      return
+    }
+    hasSemanticModel = modelURL.withUnsafeFileSystemRepresentation {
+      guard let path = $0 else { return false }
+      return SquirrelGrammarLoad(path)
+    }
+  }
+
+  func semanticScore(
+    precedingText: String,
+    candidate: String
+  ) -> Double? {
+    guard hasSemanticModel,
+          !precedingText.isEmpty,
+          !candidate.isEmpty else {
+      return nil
+    }
+    let score = precedingText.withCString { context in
+      candidate.withCString { word in
+        SquirrelGrammarScore(context, word)
+      }
+    }
+    return score.isFinite ? score : nil
+  }
+
   func contextSuffixes(_ text: String) -> [(Int, String)] {
     let characters = Array(text.suffix(8))
     guard !characters.isEmpty else { return [] }

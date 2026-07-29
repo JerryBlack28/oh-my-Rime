@@ -469,7 +469,9 @@ final class SquirrelInputController: IMKInputController {
     clipboard.target = self
     clipboard.keyEquivalentModifierMask = [.control, .shift]
     let adaptiveRanking = NSMenuItem(
-      title: "智能候选排序",
+      title: NSApp.squirrelAppDelegate.candidateReranker.hasSemanticModel
+        ? "智能候选排序（上下文模型已加载）"
+        : "智能候选排序（仅习惯学习）",
       action: #selector(toggleAdaptiveRanking),
       keyEquivalent: ""
     )
