@@ -29,6 +29,7 @@ final class SquirrelInputController: IMKInputController {
   private var chordDuration: TimeInterval = 0
   private var currentApp: String = ""
   private var clipboardEntries = [ClipboardHistoryEntry]()
+  private var clipboardPlaceholderActive = false
 
   // swiftlint:disable:next cyclomatic_complexity
   override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
@@ -374,6 +375,7 @@ final class SquirrelInputController: IMKInputController {
   }
 
   override func hidePalettes() {
+    clearClipboardPlaceholder()
     NSApp.squirrelAppDelegate.panel?.hide()
     super.hidePalettes()
   }
@@ -786,7 +788,18 @@ private extension SquirrelInputController {
     if session != 0 {
       rimeAPI.clear_composition(session)
     }
-    client.setMarkedText("", selectionRange: .empty, replacementRange: .empty)
+    clearClipboardPlaceholder()
+    // Keep an invisible marked-text composition alive while the clipboard
+    // palette is open. Web/Electron editors can observe arrow keys before
+    // InputMethodKit returns its handled result; their history shortcuts
+    // normally ignore those keys while an IME composition is active.
+    let placeholder = "\u{2060}"
+    client.setMarkedText(
+      placeholder,
+      selectionRange: NSRange(location: placeholder.utf16.count, length: 0),
+      replacementRange: .empty
+    )
+    clipboardPlaceholderActive = true
     preedit = ""
 
     var inputPosition = NSRect()
@@ -801,7 +814,14 @@ private extension SquirrelInputController {
 
   private func closeClipboardHistory() {
     clipboardEntries.removeAll()
+    clearClipboardPlaceholder()
     NSApp.squirrelAppDelegate.panel?.hideClipboard()
+  }
+
+  private func clearClipboardPlaceholder() {
+    guard clipboardPlaceholderActive else { return }
+    client?.setMarkedText("", selectionRange: .empty, replacementRange: .empty)
+    clipboardPlaceholderActive = false
   }
 
   private func handleClipboardKey(_ event: NSEvent) -> Bool? {
