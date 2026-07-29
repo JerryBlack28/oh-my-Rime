@@ -256,7 +256,7 @@ final class SquirrelInputController: IMKInputController {
         NSSound.beep()
         return false
       }
-      postPasteShortcut()
+      postPasteShortcut(to: NSWorkspace.shared.frontmostApplication?.processIdentifier)
       return true
     }
   }
@@ -987,8 +987,8 @@ private extension SquirrelInputController {
     }
   }
 
-  private func postPasteShortcut() {
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+  private func postPasteShortcut(to targetPID: pid_t?) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
       guard let source = CGEventSource(stateID: .hidSystemState),
             let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
             let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false) else {
@@ -997,8 +997,13 @@ private extension SquirrelInputController {
       }
       keyDown.flags = .maskCommand
       keyUp.flags = .maskCommand
-      keyDown.post(tap: .cghidEventTap)
-      keyUp.post(tap: .cghidEventTap)
+      if let targetPID {
+        keyDown.postToPid(targetPID)
+        keyUp.postToPid(targetPID)
+      } else {
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+      }
     }
   }
 

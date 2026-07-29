@@ -119,7 +119,15 @@ final class ClipboardHistoryManager {
         return false
       }
       pasteboard.clearContents()
-      restored = pasteboard.setData(data, forType: NSPasteboard.PasteboardType(rawType))
+      let item = NSPasteboardItem()
+      item.setData(data, forType: NSPasteboard.PasteboardType(rawType))
+      // Many AppKit editors consume TIFF rather than the original PNG/HEIC
+      // representation. Keep the source data and offer a universally readable
+      // bitmap representation alongside it.
+      if let image = NSImage(data: data), let tiff = image.tiffRepresentation {
+        item.setData(tiff, forType: .tiff)
+      }
+      restored = pasteboard.writeObjects([item])
     case .files:
       let urls = (entry.filePaths ?? []).map { NSURL(fileURLWithPath: $0) }
       guard !urls.isEmpty else { return false }
