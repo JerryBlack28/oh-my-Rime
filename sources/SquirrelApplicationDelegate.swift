@@ -17,6 +17,7 @@ final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
   var config: SquirrelConfig?
   var panel: SquirrelPanel?
   let clipboardHistory = ClipboardHistoryManager()
+  let candidateReranker = CandidateReranker()
   weak var activeInputController: SquirrelInputController?
   private lazy var globalClipboardHotkey = GlobalClipboardHotkey(delegate: self)
   private var globalClipboardEntries = [ClipboardHistoryEntry]()
@@ -34,6 +35,7 @@ final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
     NotificationCenter.default.removeObserver(self)
     DistributedNotificationCenter.default().removeObserver(self)
     clipboardHistory.stop()
+    candidateReranker.flush()
     globalClipboardHotkey.stop()
     panel?.hide()
   }

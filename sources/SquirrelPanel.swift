@@ -29,6 +29,7 @@ final class SquirrelPanel: NSPanel {
   private var comments: [String] = .init()
   private var labels: [String] = .init()
   private var candidateOffset: Int = 0
+  private var candidateAbsoluteIndices = [Int]()
   private var index: Int = 0
   private var cursorIndex: Int = 0
   private var scrollDirection: CGVector = .zero
@@ -231,6 +232,7 @@ final class SquirrelPanel: NSPanel {
     comments = .init(repeating: "", count: titles.count)
     labels = []
     candidateOffset = 0
+    candidateAbsoluteIndices = Array(titles.indices)
     index = 0
     cursorIndex = 0
     page = 0
@@ -280,9 +282,13 @@ final class SquirrelPanel: NSPanel {
     clipboardMode ? index : nil
   }
 
+  var highlightedLocalCandidateIndex: Int? {
+    candidates.indices.contains(index) ? index : nil
+  }
+
   // Main function to add attributes to text output from librime
   // swiftlint:disable:next cyclomatic_complexity function_parameter_count
-  func update(preedit: String, selRange: NSRange, caretPos: Int, candidates: [String], comments: [String], labels: [String], candidateOffset: Int, highlighted index: Int, page: Int, lastPage: Bool, update: Bool) {
+  func update(preedit: String, selRange: NSRange, caretPos: Int, candidates: [String], comments: [String], labels: [String], candidateOffset: Int, candidateAbsoluteIndices: [Int]? = nil, highlighted index: Int, page: Int, lastPage: Bool, update: Bool) {
     if update {
       self.preedit = preedit
       self.selRange = selRange
@@ -291,6 +297,12 @@ final class SquirrelPanel: NSPanel {
       self.comments = comments
       self.labels = labels
       self.candidateOffset = candidateOffset
+      if let candidateAbsoluteIndices,
+         candidateAbsoluteIndices.count == candidates.count {
+        self.candidateAbsoluteIndices = candidateAbsoluteIndices
+      } else {
+        self.candidateAbsoluteIndices = candidates.indices.map { candidateOffset + $0 }
+      }
       self.index = index
       self.page = page
       self.lastPage = lastPage
@@ -444,11 +456,27 @@ final class SquirrelPanel: NSPanel {
   }
 
   func absoluteCandidateIndex(forVisibleIndex index: Int) -> Int? {
-    candidateIndex(forVisibleIndex: index).map { candidateOffset + $0 }
+    guard let localIndex = candidateIndex(forVisibleIndex: index) else { return nil }
+    return absoluteCandidateIndex(forLocalIndex: localIndex)
   }
 
   func absoluteCandidateIndex(forLocalIndex index: Int) -> Int {
-    candidateOffset + index
+    guard candidateAbsoluteIndices.indices.contains(index) else {
+      return candidateOffset + index
+    }
+    return candidateAbsoluteIndices[index]
+  }
+
+  var usesAdaptiveCandidateOrder: Bool {
+    candidateAbsoluteIndices.indices.contains(where: {
+      candidateAbsoluteIndices[$0] != candidateOffset + $0
+    })
+  }
+
+  func adjacentCandidate(forward: Bool) -> Int? {
+    let target = index + (forward ? 1 : -1)
+    guard candidates.indices.contains(target) else { return nil }
+    return target
   }
 
   func nextCandidateAfterVisibleEnd() -> Int? {

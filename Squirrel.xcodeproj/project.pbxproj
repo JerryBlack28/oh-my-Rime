@@ -75,6 +75,7 @@
 		C0D3A0022D47A10000C0D3A0 /* rime_palette.tiff in Resources */ = {isa = PBXBuildFile; fileRef = C0D3A0012D47A10000C0D3A0 /* rime_palette.tiff */; };
 		C0D3A0042D47A10000C0D3A0 /* ClipboardHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3A0032D47A10000C0D3A0 /* ClipboardHistory.swift */; };
 		C0D3A0062D47A10000C0D3A0 /* GlobalClipboardHotkey.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3A0052D47A10000C0D3A0 /* GlobalClipboardHotkey.swift */; };
+		C0D3A0082D47A10000C0D3A0 /* CandidateReranker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D3A0072D47A10000C0D3A0 /* CandidateReranker.swift */; };
 		B35D2FE82BF00839009D156B /* BridgingFunctions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B35D2FE72BF00839009D156B /* BridgingFunctions.swift */; };
 		B38E9B912BE9AE1E0036ABEF /* SquirrelApplicationDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38E9B902BE9AE1E0036ABEF /* SquirrelApplicationDelegate.swift */; };
 		B38E9B952BEAFEFD0036ABEF /* SquirrelInputController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B38E9B942BEAFEFD0036ABEF /* SquirrelInputController.swift */; };
@@ -281,6 +282,7 @@
 		C0D3A0012D47A10000C0D3A0 /* rime_palette.tiff */ = {isa = PBXFileReference; lastKnownFileType = image.tiff; name = rime_palette.tiff; path = resources/rime_palette.tiff; sourceTree = "<group>"; };
 		C0D3A0032D47A10000C0D3A0 /* ClipboardHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ClipboardHistory.swift; path = sources/ClipboardHistory.swift; sourceTree = "<group>"; };
 		C0D3A0052D47A10000C0D3A0 /* GlobalClipboardHotkey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GlobalClipboardHotkey.swift; path = sources/GlobalClipboardHotkey.swift; sourceTree = "<group>"; };
+		C0D3A0072D47A10000C0D3A0 /* CandidateReranker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CandidateReranker.swift; path = sources/CandidateReranker.swift; sourceTree = "<group>"; };
 		B32B80772BE7FAA200FCF3BC /* Squirrel.entitlements */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.entitlements; name = Squirrel.entitlements; path = resources/Squirrel.entitlements; sourceTree = "<group>"; };
 		B35D2FE72BF00839009D156B /* BridgingFunctions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BridgingFunctions.swift; path = sources/BridgingFunctions.swift; sourceTree = "<group>"; };
 		B38E9B8F2BE9AE1E0036ABEF /* Squirrel-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = "Squirrel-Bridging-Header.h"; path = "sources/Squirrel-Bridging-Header.h"; sourceTree = "<group>"; };
@@ -320,6 +322,7 @@
 			children = (
 				C0D3A0032D47A10000C0D3A0 /* ClipboardHistory.swift */,
 				C0D3A0052D47A10000C0D3A0 /* GlobalClipboardHotkey.swift */,
+				C0D3A0072D47A10000C0D3A0 /* CandidateReranker.swift */,
 				B38E9B902BE9AE1E0036ABEF /* SquirrelApplicationDelegate.swift */,
 				B38E9B942BEAFEFD0036ABEF /* SquirrelInputController.swift */,
 				B39771222BECEA150093A49B /* MacOSKeyCodes.swift */,
@@ -585,6 +588,7 @@
 			files = (
 				C0D3A0042D47A10000C0D3A0 /* ClipboardHistory.swift in Sources */,
 				C0D3A0062D47A10000C0D3A0 /* GlobalClipboardHotkey.swift in Sources */,
+				C0D3A0082D47A10000C0D3A0 /* CandidateReranker.swift in Sources */,
 				B39771232BECEA150093A49B /* MacOSKeyCodes.swift in Sources */,
 				B39771292BEDAF4A0093A49B /* SquirrelView.swift in Sources */,
 				B38E9B952BEAFEFD0036ABEF /* SquirrelInputController.swift in Sources */,

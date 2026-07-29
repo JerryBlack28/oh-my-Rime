@@ -30,6 +30,9 @@ final class SquirrelInputController: IMKInputController {
   private var currentApp: String = ""
   private var clipboardEntries = [ClipboardHistoryEntry]()
   private var clipboardPlaceholderActive = false
+  private var candidateRankingContext: CandidateRankingContext?
+  private var lastRankedInput = ""
+  private var compositionDocumentContext = ""
 
   // swiftlint:disable:next cyclomatic_complexity
   override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
@@ -123,6 +126,11 @@ final class SquirrelInputController: IMKInputController {
         break
       }
 
+      let existingInput = rimeAPI.get_input(session).map { String(cString: $0) } ?? ""
+      if existingInput.isEmpty {
+        compositionDocumentContext = precedingClientText()
+      }
+
       let keyCode = event.keyCode
       var keyChars = event.charactersIgnoringModifiers
       let capitalModifiers = modifiers.isSubset(of: [.shift, .capsLock])
@@ -140,8 +148,29 @@ final class SquirrelInputController: IMKInputController {
       let appleGridDownKeys: Set<UInt16> = [UInt16(kVK_ANSI_Equal), UInt16(kVK_DownArrow)]
       let pageUpKeys: Set<UInt16> = [UInt16(kVK_PageUp)]
       let pageDownKeys: Set<UInt16> = [UInt16(kVK_PageDown)]
+      if hasOnlyCapsLock,
+         [UInt16(kVK_Return), UInt16(kVK_ANSI_KeypadEnter), UInt16(kVK_Space)].contains(keyCode),
+         let panel = NSApp.squirrelAppDelegate.panel,
+         panel.isVisible,
+         panel.usesAdaptiveCandidateOrder,
+         let localIndex = panel.highlightedLocalCandidateIndex {
+        handled = selectLocalCandidate(localIndex)
+        if handled {
+          break
+        }
+      }
       if hasOnlyCapsLock, keyCode == UInt16(kVK_RightArrow) {
         handled = moveRightIntoAppleGrid()
+        if handled {
+          break
+        }
+      }
+      if hasOnlyCapsLock,
+         [UInt16(kVK_LeftArrow), UInt16(kVK_RightArrow)].contains(keyCode),
+         let panel = NSApp.squirrelAppDelegate.panel,
+         panel.isVisible,
+         panel.usesAdaptiveCandidateOrder {
+        handled = moveAcrossAdaptiveCandidates(forward: keyCode == UInt16(kVK_RightArrow))
         if handled {
           break
         }
@@ -193,6 +222,15 @@ final class SquirrelInputController: IMKInputController {
 
   func selectCandidate(_ index: Int) -> Bool {
     let candidateIndex = NSApp.squirrelAppDelegate.panel?.absoluteCandidateIndex(forVisibleIndex: index) ?? index
+    let success = rimeAPI.select_candidate(session, candidateIndex)
+    if success {
+      rimeUpdate()
+    }
+    return success
+  }
+
+  private func selectLocalCandidate(_ index: Int) -> Bool {
+    let candidateIndex = NSApp.squirrelAppDelegate.panel?.absoluteCandidateIndex(forLocalIndex: index) ?? index
     let success = rimeAPI.select_candidate(session, candidateIndex)
     if success {
       rimeUpdate()
@@ -290,6 +328,21 @@ final class SquirrelInputController: IMKInputController {
     let handled = rimeAPI.highlight_candidate(session, panel.absoluteCandidateIndex(forLocalIndex: target))
     if handled {
       panel.prepareAppleGridForKeyboardNavigation()
+      rimeUpdate()
+    }
+    return handled
+  }
+
+  private func moveAcrossAdaptiveCandidates(forward: Bool) -> Bool {
+    guard let panel = NSApp.squirrelAppDelegate.panel,
+          let target = panel.adjacentCandidate(forward: forward) else {
+      return true
+    }
+    let handled = rimeAPI.highlight_candidate(
+      session,
+      panel.absoluteCandidateIndex(forLocalIndex: target)
+    )
+    if handled {
       rimeUpdate()
     }
     return handled
@@ -415,6 +468,13 @@ final class SquirrelInputController: IMKInputController {
     let clipboard = NSMenuItem(title: "剪贴板历史…", action: #selector(openClipboardHistory), keyEquivalent: "v")
     clipboard.target = self
     clipboard.keyEquivalentModifierMask = [.control, .shift]
+    let adaptiveRanking = NSMenuItem(
+      title: "智能候选排序",
+      action: #selector(toggleAdaptiveRanking),
+      keyEquivalent: ""
+    )
+    adaptiveRanking.target = self
+    adaptiveRanking.state = NSApp.squirrelAppDelegate.candidateReranker.isEnabled ? .on : .off
     let logDir = NSMenuItem(title: NSLocalizedString("Logs...", comment: "Menu item"), action: #selector(openLogFolder), keyEquivalent: "")
     logDir.target = self
     let setting = NSMenuItem(title: NSLocalizedString("Settings...", comment: "Menu item"), action: #selector(openRimeFolder), keyEquivalent: "")
@@ -426,6 +486,7 @@ final class SquirrelInputController: IMKInputController {
     menu.addItem(deploy)
     menu.addItem(sync)
     menu.addItem(clipboard)
+    menu.addItem(adaptiveRanking)
     menu.addItem(logDir)
     menu.addItem(setting)
     menu.addItem(wiki)
@@ -439,6 +500,11 @@ final class SquirrelInputController: IMKInputController {
 
   func openClipboardHistoryFromGlobalHotkey() {
     _ = showClipboardHistory(client: client)
+  }
+
+  @objc private func toggleAdaptiveRanking() {
+    _ = NSApp.squirrelAppDelegate.candidateReranker.toggleEnabled()
+    rimeUpdate()
   }
 
   @objc func deploy() {
@@ -603,7 +669,21 @@ private extension SquirrelInputController {
     var commitText = RimeCommit.rimeStructInit()
     if rimeAPI.get_commit(session, &commitText) {
       if let text = commitText.text {
-        commit(string: String(cString: text))
+        let committed = String(cString: text)
+        if let context = candidateRankingContext {
+          let chosen = context.candidates
+            .filter {
+              !($0.isEmpty) &&
+                (committed.hasPrefix($0) || committed.hasSuffix($0))
+            }
+            .max(by: { $0.count < $1.count }) ?? committed
+          NSApp.squirrelAppDelegate.candidateReranker.learn(
+            chosen: chosen,
+            context: context
+          )
+        }
+        candidateRankingContext = nil
+        commit(string: committed)
       }
       _ = rimeAPI.free_commit(&commitText)
     }
@@ -722,6 +802,24 @@ private extension SquirrelInputController {
       let lastPage = ctx.menu.is_last_page
       let highlighted = Int(ctx.menu.highlighted_candidate_index)
       let selectedCandidate = page * pageSize + highlighted
+      let input = rimeAPI.get_input(session).map { String(cString: $0) } ?? ""
+      let precedingText = compositionDocumentContext
+      let originalCandidates = candidates
+      let rankedIndices = NSApp.squirrelAppDelegate.candidateReranker.rankedIndices(
+        candidates: candidates,
+        input: input,
+        precedingText: precedingText,
+        application: currentApp
+      )
+      candidates = rankedIndices.map { candidates[$0] }
+      comments = rankedIndices.map { comments[$0] }
+      let currentAbsoluteIndices = rankedIndices.map { page * pageSize + $0 }
+      candidateRankingContext = CandidateRankingContext(
+        input: input,
+        precedingText: precedingText,
+        application: currentApp,
+        candidates: originalCandidates
+      )
 
       // Keep the fixed-width window independent from librime's backing-page
       // boundary by keeping adjacent backing pages in one candidate stream.
@@ -730,6 +828,7 @@ private extension SquirrelInputController {
       var displayedComments = comments
       var displayedLastPage = lastPage
       var candidateOffset = page * pageSize
+      var displayedAbsoluteIndices = currentAbsoluteIndices
       if page > 0, pageSize > 0 {
         let previousPageStart = candidateOffset - pageSize
         if rimeAPI.highlight_candidate(session, previousPageStart) {
@@ -744,6 +843,9 @@ private extension SquirrelInputController {
             }
             displayedCandidates = previousCandidates + displayedCandidates
             displayedComments = previousComments + displayedComments
+            displayedAbsoluteIndices =
+              Array(previousPageStart..<(previousPageStart + previousCandidates.count)) +
+              displayedAbsoluteIndices
             candidateOffset = previousPageStart
             _ = rimeAPI.free_context(&previousContext)
           }
@@ -760,6 +862,9 @@ private extension SquirrelInputController {
               displayedCandidates.append(candidate.text.map { String(cString: $0) } ?? "")
               displayedComments.append(candidate.comment.map { String(cString: $0) } ?? "")
             }
+            displayedAbsoluteIndices.append(
+              contentsOf: nextPageStart..<(nextPageStart + Int(nextContext.menu.num_candidates))
+            )
             displayedLastPage = nextContext.menu.is_last_page
             _ = rimeAPI.free_context(&nextContext)
           }
@@ -767,10 +872,18 @@ private extension SquirrelInputController {
         }
       }
 
+      let compositionChanged = input != lastRankedInput
+      let desiredAbsoluteIndex = compositionChanged ?
+        (currentAbsoluteIndices.first ?? selectedCandidate) :
+        selectedCandidate
+      let displayedHighlight =
+        displayedAbsoluteIndices.firstIndex(of: desiredAbsoluteIndex) ?? 0
+      lastRankedInput = input
       let selRange = NSRange(location: start.utf16Offset(in: preedit), length: preedit.utf16.distance(from: start, to: end))
       showPanel(preedit: inlinePreedit ? "" : preedit, selRange: selRange, caretPos: caretPos.utf16Offset(in: preedit),
                 candidates: displayedCandidates, comments: displayedComments, labels: labels, candidateOffset: candidateOffset,
-                highlighted: selectedCandidate - candidateOffset, page: page, lastPage: displayedLastPage)
+                candidateAbsoluteIndices: displayedAbsoluteIndices, highlighted: displayedHighlight,
+                page: page, lastPage: displayedLastPage)
       _ = rimeAPI.free_context(&ctx)
     } else {
       hidePalettes()
@@ -909,7 +1022,7 @@ private extension SquirrelInputController {
   }
 
   // swiftlint:disable:next function_parameter_count
-  func showPanel(preedit: String, selRange: NSRange, caretPos: Int, candidates: [String], comments: [String], labels: [String], candidateOffset: Int, highlighted: Int, page: Int, lastPage: Bool) {
+  func showPanel(preedit: String, selRange: NSRange, caretPos: Int, candidates: [String], comments: [String], labels: [String], candidateOffset: Int, candidateAbsoluteIndices: [Int], highlighted: Int, page: Int, lastPage: Bool) {
     // print("[DEBUG] showPanelWithPreedit:...:")
     guard let client = client else { return }
     var inputPos = NSRect()
@@ -918,7 +1031,19 @@ private extension SquirrelInputController {
       panel.position = inputPos
       panel.inputController = self
       panel.update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments, labels: labels,
-                   candidateOffset: candidateOffset, highlighted: highlighted, page: page, lastPage: lastPage, update: true)
+                   candidateOffset: candidateOffset, candidateAbsoluteIndices: candidateAbsoluteIndices,
+                   highlighted: highlighted, page: page, lastPage: lastPage, update: true)
     }
+  }
+
+  func precedingClientText(limit: Int = 96) -> String {
+    guard let client else { return "" }
+    let selection = client.selectedRange()
+    guard selection.location != NSNotFound, selection.location > 0 else {
+      return ""
+    }
+    let length = min(limit, selection.location)
+    let range = NSRange(location: selection.location - length, length: length)
+    return client.attributedSubstring(from: range)?.string ?? ""
   }
 }
