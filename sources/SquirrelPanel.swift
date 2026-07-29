@@ -804,7 +804,9 @@ private final class AppleCandidateGridView: NSView {
   func target(up: Bool) -> (candidateIndex: Int, visibleStartRow: Int)? {
     guard let selected = cells.first(where: { $0.candidateIndex == highlightedIndex }) else { return nil }
     let targetRow = selected.row + (up ? -1 : 1)
-    guard let target = cells.first(where: { $0.row == targetRow }) else { return nil }
+    let rowCells = cells.filter { $0.row == targetRow }
+    guard let lastCell = rowCells.last else { return nil }
+    let target = rowCells.first(where: { $0.orderInRow == selected.orderInRow }) ?? lastCell
     var nextStart = visibleStartRow
     if up, targetRow <= visibleStartRow {
       nextStart = max(0, visibleStartRow - 1)
