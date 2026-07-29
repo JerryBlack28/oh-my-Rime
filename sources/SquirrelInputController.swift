@@ -110,10 +110,10 @@ final class SquirrelInputController: IMKInputController {
       // candidates on each visual page. Handle paging and numeric selection
       // here so they map back to the corresponding librime page index.
       let hasOnlyCapsLock = modifiers.intersection([.command, .control, .option, .shift]).isEmpty
-      let appleGridUpKeys: Set<UInt16> = [UInt16(kVK_ANSI_Minus)]
-      let appleGridDownKeys: Set<UInt16> = [UInt16(kVK_ANSI_Equal)]
-      let pageUpKeys: Set<UInt16> = [UInt16(kVK_UpArrow), UInt16(kVK_PageUp)]
-      let pageDownKeys: Set<UInt16> = [UInt16(kVK_DownArrow), UInt16(kVK_PageDown)]
+      let appleGridUpKeys: Set<UInt16> = [UInt16(kVK_ANSI_Minus), UInt16(kVK_UpArrow)]
+      let appleGridDownKeys: Set<UInt16> = [UInt16(kVK_ANSI_Equal), UInt16(kVK_DownArrow)]
+      let pageUpKeys: Set<UInt16> = [UInt16(kVK_PageUp)]
+      let pageDownKeys: Set<UInt16> = [UInt16(kVK_PageDown)]
       if hasOnlyCapsLock, keyCode == UInt16(kVK_RightArrow) {
         handled = moveRightIntoAppleGrid()
         if handled {

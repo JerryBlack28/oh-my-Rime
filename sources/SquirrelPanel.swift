@@ -867,7 +867,7 @@ private final class AppleCandidateGridView: NSView {
       let candidateAttributes = isHighlighted ? highlightedAttributes : normalAttributes
       let candidateSize = (candidate as NSString).size(withAttributes: candidateAttributes)
 
-      var candidateX = cellX + 11.5
+      let candidateX = cellX + 15.5
       if isActiveRow {
         let label = "\(cell.orderInRow + 1)"
         let labelAttributes = isHighlighted ? highlightedLabelAttributes : labelAttributes
@@ -882,7 +882,6 @@ private final class AppleCandidateGridView: NSView {
           pill.fill()
         }
         (label as NSString).draw(at: NSPoint(x: cellX + 5.5, y: cellY + 9.5), withAttributes: labelAttributes)
-        candidateX = cellX + 15.5
       }
       (candidate as NSString).draw(at: NSPoint(x: candidateX, y: cellY + 5.5), withAttributes: candidateAttributes)
     }
