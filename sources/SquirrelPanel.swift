@@ -55,6 +55,10 @@ final class SquirrelPanel: NSPanel {
     back.state = .active
     back.wantsLayer = true
     back.layer?.mask = view.shape
+    back.autoresizingMask = [.width, .height]
+    view.autoresizingMask = [.width, .height]
+    view.textView.autoresizingMask = [.width, .height]
+    appleGrid.autoresizingMask = [.width, .height]
     let contentView = NSView()
     contentView.addSubview(back)
     contentView.addSubview(view)
@@ -168,6 +172,9 @@ final class SquirrelPanel: NSPanel {
     maxHeight = 0
     appleGridMode = false
     appleGrid.isHidden = true
+    appleGrid.alphaValue = 1
+    view.alphaValue = 1
+    view.textView.alphaValue = 1
     lastPresentationWasAppleGrid = nil
   }
 
@@ -692,13 +699,20 @@ private extension SquirrelPanel {
   func setPanelFrame(_ frame: NSRect, appleGrid: Bool) {
     let isTransition = isVisible && lastPresentationWasAppleGrid != appleGrid
     if isTransition {
+      let destinationViews: [NSView] = appleGrid ? [self.appleGrid] : [view, view.textView]
+      destinationViews.forEach { $0.alphaValue = 0 }
       NSAnimationContext.runAnimationGroup { context in
-        context.duration = 0.24
-        context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        context.duration = 0.16
+        context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        context.allowsImplicitAnimation = true
         self.animator().setFrame(frame, display: true)
+        destinationViews.forEach { $0.animator().alphaValue = 1 }
       }
     } else {
       setFrame(frame, display: true)
+      self.appleGrid.alphaValue = 1
+      view.alphaValue = 1
+      view.textView.alphaValue = 1
     }
     lastPresentationWasAppleGrid = appleGrid
   }
