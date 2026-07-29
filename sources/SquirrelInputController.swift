@@ -109,8 +109,10 @@ final class SquirrelInputController: IMKInputController {
       }
       if NSApp.squirrelAppDelegate.panel?.clipboardMode == true {
         if let clipboardHandled = handleClipboardKey(event) {
-          handled = clipboardHandled
-          break
+          // Return directly. Some clients (including Codex) attach their own
+          // history action to the Up arrow; merely falling through the normal
+          // input-method path can allow that client command to run as well.
+          return clipboardHandled
         }
         closeClipboardHistory()
       }
@@ -803,10 +805,10 @@ private extension SquirrelInputController {
   }
 
   private func handleClipboardKey(_ event: NSEvent) -> Bool? {
-    let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
-    guard modifiers.isEmpty || modifiers == [.capsLock] else { return nil }
     guard let panel = NSApp.squirrelAppDelegate.panel else { return nil }
 
+    // Navigation keys always belong exclusively to the open clipboard panel,
+    // even if macOS still reports a just-released shortcut modifier.
     switch Int(event.keyCode) {
     case kVK_Escape:
       closeClipboardHistory()
@@ -827,6 +829,8 @@ private extension SquirrelInputController {
     case kVK_PageDown:
       return panel.pageClipboard(up: false)
     default:
+      let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+      guard modifiers.isEmpty else { return nil }
       if let characters = event.charactersIgnoringModifiers,
          let number = Int(characters),
          number >= 1,
