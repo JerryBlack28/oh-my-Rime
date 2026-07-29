@@ -167,7 +167,7 @@ To clean **Squirrel** artifacts, without touching dependencies, run:
 make clean
 ```
 
-To clean up **dependencies**, including librime, librime plugins, plum and sparkle, run:
+To clean up **dependencies**, including librime, librime plugins and plum, run:
 
 ``` sh
 make clean-deps

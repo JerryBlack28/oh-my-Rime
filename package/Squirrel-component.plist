@@ -13,15 +13,6 @@
 		<true/>
 		<key>BundleOverwriteAction</key>
 		<string>upgrade</string>
-		<key>ChildBundles</key>
-		<array>
-			<dict>
-				<key>BundleOverwriteAction</key>
-				<string>upgrade</string>
-				<key>RootRelativeBundlePath</key>
-				<string>Squirrel.app/Contents/Frameworks/Sparkle.framework</string>
-			</dict>
-		</array>
 	</dict>
 </array>
 </plist>

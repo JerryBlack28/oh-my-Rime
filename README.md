@@ -90,7 +90,6 @@
   * librime  (New BSD License)
   * OpenCC / 開放中文轉換  (Apache License 2.0)
   * plum / 東風破 (GNU Lesser General Public License 3.0)
-  * Sparkle  (MIT License)
   * UTF8-CPP  (Boost Software License)
   * yaml-cpp  (MIT License)
 
