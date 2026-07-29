@@ -151,9 +151,9 @@ final class SquirrelInputController: IMKInputController {
       if hasOnlyCapsLock,
          [UInt16(kVK_Return), UInt16(kVK_ANSI_KeypadEnter)].contains(keyCode),
          shouldCommitRawInputOnReturn(existingInput) {
-        // Treat Return as an explicit English-input escape hatch while an
-        // alphabetic Rime composition is active. Space still confirms Chinese.
-        commit(string: existingInput)
+        // Preserve already selected Chinese segments while committing the
+        // remaining ASCII input. Space still confirms Chinese candidates.
+        commit(string: rawCommitText(for: existingInput))
         rimeAPI.clear_composition(session)
         rimeUpdate()
         handled = true
@@ -925,6 +925,15 @@ private extension SquirrelInputController {
         return false
       }
     }
+  }
+
+  private func rawCommitText(for input: String) -> String {
+    var ctx = RimeContext_stdbool.rimeStructInit()
+    guard rimeAPI.get_context(session, &ctx) else {
+      return input
+    }
+    let preedit = ctx.composition.preedit.map { String(cString: $0) } ?? ""
+    return preedit.isEmpty ? input : preedit
   }
 
   private func showClipboardHistory(client sender: Any!) -> Bool {
