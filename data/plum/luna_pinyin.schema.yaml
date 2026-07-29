@@ -81,7 +81,7 @@ custom_phrase:
 english:
   dictionary: english
   enable_sentence: false
-  enable_completion: true
+  enable_completion: false
   initial_quality: 1.2
 
 reverse_lookup:
