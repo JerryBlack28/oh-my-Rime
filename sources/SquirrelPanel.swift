@@ -10,6 +10,7 @@ import AppKit
 final class SquirrelPanel: NSPanel {
   private let view: SquirrelView
   private let back: NSVisualEffectView
+  private let appleGrid: AppleCandidateGridView
   var inputController: SquirrelInputController?
 
   var position: NSRect
@@ -34,11 +35,14 @@ final class SquirrelPanel: NSPanel {
   private var lastPage: Bool = true
   private var pagingUp: Bool?
   private var visibleCandidateRange: Range<Int> = 0..<0
+  private var appleGridStartCandidate: Int = 0
+  private(set) var appleGridMode = false
 
   init(position: NSRect) {
     self.position = position
     self.view = SquirrelView(frame: position)
     self.back = NSVisualEffectView()
+    self.appleGrid = AppleCandidateGridView()
     super.init(contentRect: position, styleMask: .nonactivatingPanel, backing: .buffered, defer: true)
     self.level = .init(Int(CGShieldingWindowLevel()))
     self.hasShadow = true
@@ -53,6 +57,8 @@ final class SquirrelPanel: NSPanel {
     contentView.addSubview(back)
     contentView.addSubview(view)
     contentView.addSubview(view.textView)
+    contentView.addSubview(appleGrid)
+    appleGrid.isHidden = true
     self.contentView = contentView
   }
 
@@ -158,6 +164,30 @@ final class SquirrelPanel: NSPanel {
     statusTimer = nil
     orderOut(nil)
     maxHeight = 0
+    appleGridMode = false
+    appleGrid.isHidden = true
+  }
+
+  func activateAppleGrid() -> Bool {
+    guard !candidates.isEmpty else { return false }
+    appleGridMode = true
+    appleGridStartCandidate = candidateOffset + index / AppleCandidateGridView.columnCount * AppleCandidateGridView.columnCount
+    updateAppleGrid()
+    return true
+  }
+
+  func appleGridTarget(up: Bool) -> Int? {
+    guard appleGridMode else { return nil }
+    let target = index + (up ? -AppleCandidateGridView.columnCount : AppleCandidateGridView.columnCount)
+    guard candidates.indices.contains(target) else { return nil }
+
+    let targetCandidate = candidateOffset + target
+    if targetCandidate < appleGridStartCandidate + AppleCandidateGridView.columnCount {
+      appleGridStartCandidate = max(0, appleGridStartCandidate - AppleCandidateGridView.columnCount)
+    } else if targetCandidate >= appleGridStartCandidate + AppleCandidateGridView.visibleCount {
+      appleGridStartCandidate += AppleCandidateGridView.columnCount
+    }
+    return target
   }
 
   // Main function to add attributes to text output from librime
@@ -176,6 +206,11 @@ final class SquirrelPanel: NSPanel {
       self.lastPage = lastPage
     }
     cursorIndex = index
+
+    if appleGridMode {
+      updateAppleGrid()
+      return
+    }
 
     let pageRanges = candidatePageRanges(candidates: candidates, comments: comments, labels: labels)
     let selectedRange = pageRanges.first(where: { $0.contains(index) }) ?? pageRanges.first ?? 0..<0
@@ -376,6 +411,41 @@ final class SquirrelPanel: NSPanel {
 }
 
 private extension SquirrelPanel {
+  func updateAppleGrid() {
+    guard !candidates.isEmpty else {
+      appleGridMode = false
+      appleGrid.isHidden = true
+      return
+    }
+
+    let selectedCandidate = candidateOffset + index
+    while selectedCandidate < appleGridStartCandidate {
+      appleGridStartCandidate = max(0, appleGridStartCandidate - AppleCandidateGridView.columnCount)
+    }
+    while selectedCandidate >= appleGridStartCandidate + AppleCandidateGridView.visibleCount {
+      appleGridStartCandidate += AppleCandidateGridView.columnCount
+    }
+
+    var start = appleGridStartCandidate - candidateOffset
+    if start < 0 || start >= candidates.count {
+      start = max(0, min(candidates.count - 1, index / AppleCandidateGridView.columnCount * AppleCandidateGridView.columnCount))
+      appleGridStartCandidate = candidateOffset + start
+    }
+    let displayedCount = min(AppleCandidateGridView.visibleCount, candidates.count - start)
+    let displayedRange = start..<(start + displayedCount)
+    let activeRowStart = start + (index - start) / AppleCandidateGridView.columnCount * AppleCandidateGridView.columnCount
+    let activeRowEnd = min(activeRowStart + AppleCandidateGridView.columnCount, candidates.count)
+    visibleCandidateRange = activeRowStart..<activeRowEnd
+
+    appleGrid.update(
+      candidates: Array(candidates[displayedRange]),
+      absoluteStart: appleGridStartCandidate,
+      highlightedCandidate: selectedCandidate
+    )
+    currentScreen()
+    show()
+  }
+
   func mousePosition() -> NSPoint {
     var point = NSEvent.mouseLocation
     point = self.convertPoint(fromScreen: point)
@@ -475,6 +545,14 @@ private extension SquirrelPanel {
   // swiftlint:disable:next cyclomatic_complexity
   func show() {
     currentScreen()
+    if appleGridMode {
+      showAppleGrid()
+      return
+    }
+
+    appleGrid.isHidden = true
+    view.isHidden = false
+    view.textView.isHidden = false
     let theme = view.currentTheme
     if theme.native || view.darkTheme.available {
       self.appearance = NSApp.effectiveAppearance
@@ -584,6 +662,45 @@ private extension SquirrelPanel {
     // voila!
   }
 
+  func showAppleGrid() {
+    let preferredSize = AppleCandidateGridView.preferredSize
+    let panelSize = NSSize(
+      width: min(preferredSize.width, screenRect.width * 0.95),
+      height: min(preferredSize.height, screenRect.height * 0.95)
+    )
+    var panelRect = NSRect(
+      x: position.minX - 12,
+      y: position.minY - SquirrelTheme.offsetHeight - panelSize.height,
+      width: panelSize.width,
+      height: panelSize.height
+    )
+    if panelRect.maxX > screenRect.maxX {
+      panelRect.origin.x = screenRect.maxX - panelRect.width
+    }
+    if panelRect.minX < screenRect.minX {
+      panelRect.origin.x = screenRect.minX
+    }
+    if panelRect.minY < screenRect.minY {
+      panelRect.origin.y = position.maxY + SquirrelTheme.offsetHeight
+    }
+    if panelRect.maxY > screenRect.maxY {
+      panelRect.origin.y = screenRect.maxY - panelRect.height
+    }
+
+    setFrame(panelRect, display: true)
+    contentView!.boundsRotation = 0
+    contentView!.setBoundsOrigin(.zero)
+    view.isHidden = true
+    view.textView.isHidden = true
+    back.isHidden = true
+    appleGrid.frame = contentView!.bounds
+    appleGrid.isHidden = false
+    appleGrid.needsDisplay = true
+    alphaValue = 1
+    invalidateShadow()
+    orderFront(nil)
+  }
+
   func show(status message: String) {
     let theme = view.currentTheme
     let text = NSMutableAttributedString(string: message, attributes: theme.attrs)
@@ -604,5 +721,99 @@ private extension SquirrelPanel {
     let startPos = range.lowerBound.utf16Offset(in: string)
     let endPos = range.upperBound.utf16Offset(in: string)
     return NSRange(location: startPos, length: endPos - startPos)
+  }
+}
+
+private final class AppleCandidateGridView: NSView {
+  static let columnCount = 6
+  static let rowCount = 5
+  static let visibleCount = columnCount * rowCount
+  static let preferredSize = NSSize(width: 800, height: 302)
+
+  private var candidates = [String]()
+  private var absoluteStart = 0
+  private var highlightedCandidate = 0
+
+  override var isFlipped: Bool { true }
+
+  func update(candidates: [String], absoluteStart: Int, highlightedCandidate: Int) {
+    self.candidates = candidates
+    self.absoluteStart = absoluteStart
+    self.highlightedCandidate = highlightedCandidate
+    needsDisplay = true
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    let bounds = self.bounds.insetBy(dx: 0.5, dy: 0.5)
+    let cornerRadius = min(26, bounds.height / 10)
+    let background = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
+    NSColor(calibratedWhite: 0.975, alpha: 0.99).setFill()
+    background.fill()
+    NSColor(calibratedWhite: 0.7, alpha: 0.95).setStroke()
+    background.lineWidth = 1
+    background.stroke()
+
+    let rowHeight = bounds.height / CGFloat(Self.rowCount)
+    let columnWidth = bounds.width / CGFloat(Self.columnCount)
+    let separator = NSColor(calibratedWhite: 0.89, alpha: 0.85)
+    separator.setStroke()
+    for row in 1..<Self.rowCount {
+      let line = NSBezierPath()
+      line.move(to: NSPoint(x: bounds.minX, y: bounds.minY + CGFloat(row) * rowHeight))
+      line.line(to: NSPoint(x: bounds.maxX, y: bounds.minY + CGFloat(row) * rowHeight))
+      line.lineWidth = 0.75
+      line.stroke()
+    }
+
+    let textFont = NSFont(name: "PingFang SC", size: 28) ?? .systemFont(ofSize: 28, weight: .regular)
+    let labelFont = NSFont.systemFont(ofSize: 16, weight: .regular)
+    let normalAttributes: [NSAttributedString.Key: Any] = [
+      .font: textFont,
+      .foregroundColor: NSColor(calibratedWhite: 0.13, alpha: 1)
+    ]
+    let highlightedAttributes: [NSAttributedString.Key: Any] = [
+      .font: textFont,
+      .foregroundColor: NSColor.white
+    ]
+    let labelAttributes: [NSAttributedString.Key: Any] = [
+      .font: labelFont,
+      .foregroundColor: NSColor(calibratedWhite: 0.46, alpha: 1)
+    ]
+    let highlightedLabelAttributes: [NSAttributedString.Key: Any] = [
+      .font: labelFont,
+      .foregroundColor: NSColor.white
+    ]
+
+    let localHighlighted = highlightedCandidate - absoluteStart
+    let highlightedRow = localHighlighted >= 0 ? localHighlighted / Self.columnCount : -1
+    for (candidateIndex, candidate) in candidates.enumerated() {
+      let row = candidateIndex / Self.columnCount
+      let column = candidateIndex % Self.columnCount
+      let cellX = bounds.minX + CGFloat(column) * columnWidth
+      let cellY = bounds.minY + CGFloat(row) * rowHeight
+      let isHighlighted = candidateIndex == localHighlighted
+      let isActiveRow = row == highlightedRow
+      let candidateAttributes = isHighlighted ? highlightedAttributes : normalAttributes
+      let candidateSize = (candidate as NSString).size(withAttributes: candidateAttributes)
+
+      var candidateX = cellX + 23
+      if isActiveRow {
+        let label = "\(column + 1)"
+        let labelAttributes = isHighlighted ? highlightedLabelAttributes : labelAttributes
+        if isHighlighted {
+          let pillWidth = min(columnWidth - 10, max(112, candidateSize.width + 44))
+          let pill = NSBezierPath(
+            roundedRect: NSRect(x: cellX + 6, y: cellY + 6, width: pillWidth, height: rowHeight - 12),
+            xRadius: (rowHeight - 12) / 2,
+            yRadius: (rowHeight - 12) / 2
+          )
+          NSColor.systemBlue.setFill()
+          pill.fill()
+        }
+        (label as NSString).draw(at: NSPoint(x: cellX + 11, y: cellY + 19), withAttributes: labelAttributes)
+        candidateX = cellX + 31
+      }
+      (candidate as NSString).draw(at: NSPoint(x: candidateX, y: cellY + 11), withAttributes: candidateAttributes)
+    }
   }
 }

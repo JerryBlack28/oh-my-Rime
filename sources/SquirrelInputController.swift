@@ -110,8 +110,16 @@ final class SquirrelInputController: IMKInputController {
       // candidates on each visual page. Handle paging and numeric selection
       // here so they map back to the corresponding librime page index.
       let hasOnlyCapsLock = modifiers.intersection([.command, .control, .option, .shift]).isEmpty
-      let pageUpKeys: Set<UInt16> = [UInt16(kVK_UpArrow), UInt16(kVK_ANSI_Minus), UInt16(kVK_PageUp)]
-      let pageDownKeys: Set<UInt16> = [UInt16(kVK_DownArrow), UInt16(kVK_ANSI_Equal), UInt16(kVK_PageDown)]
+      let appleGridUpKeys: Set<UInt16> = [UInt16(kVK_ANSI_Minus)]
+      let appleGridDownKeys: Set<UInt16> = [UInt16(kVK_ANSI_Equal)]
+      let pageUpKeys: Set<UInt16> = [UInt16(kVK_UpArrow), UInt16(kVK_PageUp)]
+      let pageDownKeys: Set<UInt16> = [UInt16(kVK_DownArrow), UInt16(kVK_PageDown)]
+      if hasOnlyCapsLock, appleGridUpKeys.contains(keyCode) || appleGridDownKeys.contains(keyCode) {
+        handled = appleGridPage(up: appleGridUpKeys.contains(keyCode))
+        if handled {
+          break
+        }
+      }
       if hasOnlyCapsLock, pageUpKeys.contains(keyCode) || pageDownKeys.contains(keyCode) {
         handled = page(up: pageUpKeys.contains(keyCode))
         if handled {
@@ -195,6 +203,21 @@ final class SquirrelInputController: IMKInputController {
       _ = rimeAPI.highlight_candidate_on_current_page(session, 0)
       handled = rimeAPI.change_page(session, up)
     }
+    if handled {
+      rimeUpdate()
+    }
+    return handled
+  }
+
+  private func appleGridPage(up: Bool) -> Bool {
+    guard let panel = NSApp.squirrelAppDelegate.panel, panel.isVisible else { return false }
+
+    if !panel.appleGridMode {
+      return panel.activateAppleGrid()
+    }
+
+    guard let target = panel.appleGridTarget(up: up) else { return false }
+    let handled = rimeAPI.highlight_candidate(session, panel.absoluteCandidateIndex(forLocalIndex: target))
     if handled {
       rimeUpdate()
     }
