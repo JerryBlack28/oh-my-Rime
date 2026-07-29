@@ -7,6 +7,7 @@
 
 import UserNotifications
 import AppKit
+import ApplicationServices
 import Carbon
 
 final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
@@ -252,7 +253,8 @@ private extension SquirrelApplicationDelegate {
     }
 
     let mouse = NSEvent.mouseLocation
-    panel.position = NSRect(x: mouse.x, y: mouse.y, width: 1, height: 22)
+    panel.position = focusedInsertionRect() ??
+      NSRect(x: mouse.x, y: mouse.y, width: 1, height: 22)
     panel.inputController = nil
     panel.clipboardSelectionHandler = { [weak self] index in
       self?.selectGlobalClipboardEntry(index)
@@ -292,6 +294,71 @@ private extension SquirrelApplicationDelegate {
       keyDown.post(tap: .cghidEventTap)
       keyUp.post(tap: .cghidEventTap)
     }
+  }
+
+  func focusedInsertionRect() -> NSRect? {
+    let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+    guard AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary) else {
+      return nil
+    }
+
+    let systemWide = AXUIElementCreateSystemWide()
+    var focusedValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(
+      systemWide,
+      kAXFocusedUIElementAttribute as CFString,
+      &focusedValue
+    ) == .success,
+      let focusedValue else {
+      return nil
+    }
+    let focusedElement = focusedValue as! AXUIElement
+
+    var selectedRangeValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(
+      focusedElement,
+      kAXSelectedTextRangeAttribute as CFString,
+      &selectedRangeValue
+    ) == .success,
+      let selectedRangeValue else {
+      return nil
+    }
+
+    var boundsValue: CFTypeRef?
+    guard AXUIElementCopyParameterizedAttributeValue(
+      focusedElement,
+      kAXBoundsForRangeParameterizedAttribute as CFString,
+      selectedRangeValue,
+      &boundsValue
+    ) == .success,
+      let boundsValue,
+      CFGetTypeID(boundsValue) == AXValueGetTypeID() else {
+      return nil
+    }
+
+    var accessibilityBounds = CGRect.zero
+    guard AXValueGetValue(boundsValue as! AXValue, .cgRect, &accessibilityBounds) else {
+      return nil
+    }
+    return appKitRect(fromAccessibilityRect: accessibilityBounds)
+  }
+
+  func appKitRect(fromAccessibilityRect rect: CGRect) -> NSRect? {
+    let center = CGPoint(x: rect.midX, y: rect.midY)
+    for screen in NSScreen.screens {
+      guard let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+        continue
+      }
+      let displayBounds = CGDisplayBounds(CGDirectDisplayID(screenNumber.uint32Value))
+      guard displayBounds.contains(center) else { continue }
+
+      let x = screen.frame.minX + rect.minX - displayBounds.minX
+      let yFromDisplayTop = rect.minY - displayBounds.minY
+      let height = max(1, rect.height)
+      let y = screen.frame.maxY - yFromDisplayTop - height
+      return NSRect(x: x, y: y, width: max(1, rect.width), height: height)
+    }
+    return nil
   }
 }
 
