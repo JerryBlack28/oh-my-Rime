@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import QuartzCore
 
 final class SquirrelPanel: NSPanel {
   private let view: SquirrelView
@@ -35,7 +36,7 @@ final class SquirrelPanel: NSPanel {
   private var lastPage: Bool = true
   private var pagingUp: Bool?
   private var visibleCandidateRange: Range<Int> = 0..<0
-  private var appleGridStartCandidate: Int = 0
+  private var appleGridStartRow = 0
   private(set) var appleGridMode = false
   private var lastPresentationWasAppleGrid: Bool?
 
@@ -173,23 +174,16 @@ final class SquirrelPanel: NSPanel {
   func activateAppleGrid() -> Bool {
     guard !candidates.isEmpty else { return false }
     appleGridMode = true
-    appleGridStartCandidate = candidateOffset + index / AppleCandidateGridView.columnCount * AppleCandidateGridView.columnCount
+    appleGridStartRow = 0
     updateAppleGrid()
     return true
   }
 
   func appleGridTarget(up: Bool) -> Int? {
     guard appleGridMode else { return nil }
-    let target = index + (up ? -AppleCandidateGridView.columnCount : AppleCandidateGridView.columnCount)
-    guard candidates.indices.contains(target) else { return nil }
-
-    let targetCandidate = candidateOffset + target
-    if targetCandidate < appleGridStartCandidate + AppleCandidateGridView.columnCount {
-      appleGridStartCandidate = max(0, appleGridStartCandidate - AppleCandidateGridView.columnCount)
-    } else if targetCandidate >= appleGridStartCandidate + AppleCandidateGridView.visibleCount {
-      appleGridStartCandidate += AppleCandidateGridView.columnCount
-    }
-    return target
+    guard let target = appleGrid.target(up: up) else { return nil }
+    appleGridStartRow = target.visibleStartRow
+    return target.candidateIndex
   }
 
   func deactivateAppleGrid() {
@@ -428,30 +422,14 @@ private extension SquirrelPanel {
       return
     }
 
-    let selectedCandidate = candidateOffset + index
-    while selectedCandidate < appleGridStartCandidate {
-      appleGridStartCandidate = max(0, appleGridStartCandidate - AppleCandidateGridView.columnCount)
-    }
-    while selectedCandidate >= appleGridStartCandidate + AppleCandidateGridView.visibleCount {
-      appleGridStartCandidate += AppleCandidateGridView.columnCount
-    }
-
-    var start = appleGridStartCandidate - candidateOffset
-    if start < 0 || start >= candidates.count {
-      start = max(0, min(candidates.count - 1, index / AppleCandidateGridView.columnCount * AppleCandidateGridView.columnCount))
-      appleGridStartCandidate = candidateOffset + start
-    }
-    let displayedCount = min(AppleCandidateGridView.visibleCount, candidates.count - start)
-    let displayedRange = start..<(start + displayedCount)
-    let activeRowStart = start + (index - start) / AppleCandidateGridView.columnCount * AppleCandidateGridView.columnCount
-    let activeRowEnd = min(activeRowStart + AppleCandidateGridView.columnCount, candidates.count)
-    visibleCandidateRange = activeRowStart..<activeRowEnd
-
     appleGrid.update(
-      candidates: Array(candidates[displayedRange]),
-      absoluteStart: appleGridStartCandidate,
-      highlightedCandidate: selectedCandidate
+      candidates: candidates,
+      candidateOffset: candidateOffset,
+      highlightedIndex: index,
+      visibleStartRow: appleGridStartRow
     )
+    appleGridStartRow = appleGrid.visibleStartRow
+    visibleCandidateRange = appleGrid.activeCandidateRange
     currentScreen()
     show()
   }
@@ -713,7 +691,15 @@ private extension SquirrelPanel {
 
   func setPanelFrame(_ frame: NSRect, appleGrid: Bool) {
     let isTransition = isVisible && lastPresentationWasAppleGrid != appleGrid
-    setFrame(frame, display: true, animate: isTransition)
+    if isTransition {
+      NSAnimationContext.runAnimationGroup { context in
+        context.duration = 0.24
+        context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        self.animator().setFrame(frame, display: true)
+      }
+    } else {
+      setFrame(frame, display: true)
+    }
     lastPresentationWasAppleGrid = appleGrid
   }
 
@@ -743,32 +729,70 @@ private extension SquirrelPanel {
 private final class AppleCandidateGridView: NSView {
   static let columnCount = 6
   static let rowCount = 5
-  static let visibleCount = columnCount * rowCount
   // The reference images are Retina screenshots. AppKit sizes are in points,
   // so these values are half of the captured pixel dimensions.
   static let preferredSize = NSSize(width: 400, height: 151)
 
+  private struct CandidateCell {
+    let candidateIndex: Int
+    let row: Int
+    let column: Int
+    let span: Int
+    let orderInRow: Int
+  }
+
   private var candidates = [String]()
-  private var absoluteStart = 0
-  private var highlightedCandidate = 0
+  private var highlightedIndex = 0
+  private var cells = [CandidateCell]()
+  private(set) var visibleStartRow = 0
+  private(set) var activeCandidateRange: Range<Int> = 0..<0
 
   override var isFlipped: Bool { true }
 
-  func update(candidates: [String], absoluteStart: Int, highlightedCandidate: Int) {
+  func update(candidates: [String], candidateOffset: Int, highlightedIndex: Int, visibleStartRow: Int) {
     self.candidates = candidates
-    self.absoluteStart = absoluteStart
-    self.highlightedCandidate = highlightedCandidate
+    self.highlightedIndex = highlightedIndex
+    cells = makeCells(candidates: candidates)
+
+    let highlightedRow = cells.first(where: { $0.candidateIndex == highlightedIndex })?.row ?? 0
+    let finalRow = cells.last?.row ?? 0
+    self.visibleStartRow = min(max(0, visibleStartRow), max(0, finalRow - Self.rowCount + 1))
+    if highlightedRow < self.visibleStartRow {
+      self.visibleStartRow = max(0, highlightedRow - 1)
+    } else if highlightedRow >= self.visibleStartRow + Self.rowCount {
+      self.visibleStartRow = highlightedRow - Self.rowCount + 1
+    }
+
+    let activeCells = cells.filter { $0.row == highlightedRow }
+    if let first = activeCells.first?.candidateIndex, let last = activeCells.last?.candidateIndex {
+      activeCandidateRange = first..<(last + 1)
+    } else {
+      activeCandidateRange = 0..<0
+    }
     needsDisplay = true
   }
 
+  func target(up: Bool) -> (candidateIndex: Int, visibleStartRow: Int)? {
+    guard let selected = cells.first(where: { $0.candidateIndex == highlightedIndex }) else { return nil }
+    let targetRow = selected.row + (up ? -1 : 1)
+    guard let target = cells.first(where: { $0.row == targetRow }) else { return nil }
+    var nextStart = visibleStartRow
+    if up, targetRow <= visibleStartRow {
+      nextStart = max(0, visibleStartRow - 1)
+    } else if !up, targetRow >= visibleStartRow + Self.rowCount {
+      nextStart += 1
+    }
+    return (target.candidateIndex, nextStart)
+  }
+
   override func draw(_ dirtyRect: NSRect) {
-    let bounds = self.bounds.insetBy(dx: 0.5, dy: 0.5)
+    let bounds = self.bounds.insetBy(dx: 0.25, dy: 0.25)
     let cornerRadius = min(13, bounds.height / 10)
     let background = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
     NSColor(calibratedWhite: 0.975, alpha: 0.99).setFill()
     background.fill()
-    NSColor(calibratedWhite: 0.76, alpha: 0.82).setStroke()
-    background.lineWidth = 1
+    NSColor(calibratedWhite: 0.8, alpha: 0.72).setStroke()
+    background.lineWidth = 0.5
     background.stroke()
 
     let rowHeight = bounds.height / CGFloat(Self.rowCount)
@@ -802,24 +826,24 @@ private final class AppleCandidateGridView: NSView {
       .foregroundColor: NSColor.white
     ]
 
-    let localHighlighted = highlightedCandidate - absoluteStart
-    let highlightedRow = localHighlighted >= 0 ? localHighlighted / Self.columnCount : -1
-    for (candidateIndex, candidate) in candidates.enumerated() {
-      let row = candidateIndex / Self.columnCount
-      let column = candidateIndex % Self.columnCount
-      let cellX = bounds.minX + CGFloat(column) * columnWidth
+    let highlightedRow = cells.first(where: { $0.candidateIndex == highlightedIndex })?.row ?? -1
+    for cell in cells where cell.row >= visibleStartRow && cell.row < visibleStartRow + Self.rowCount {
+      let candidate = candidates[cell.candidateIndex]
+      let row = cell.row - visibleStartRow
+      let cellX = bounds.minX + CGFloat(cell.column) * columnWidth
       let cellY = bounds.minY + CGFloat(row) * rowHeight
-      let isHighlighted = candidateIndex == localHighlighted
-      let isActiveRow = row == highlightedRow
+      let cellWidth = CGFloat(cell.span) * columnWidth
+      let isHighlighted = cell.candidateIndex == highlightedIndex
+      let isActiveRow = cell.row == highlightedRow
       let candidateAttributes = isHighlighted ? highlightedAttributes : normalAttributes
       let candidateSize = (candidate as NSString).size(withAttributes: candidateAttributes)
 
       var candidateX = cellX + 11.5
       if isActiveRow {
-        let label = "\(column + 1)"
+        let label = "\(cell.orderInRow + 1)"
         let labelAttributes = isHighlighted ? highlightedLabelAttributes : labelAttributes
         if isHighlighted {
-          let pillWidth = min(columnWidth - 5, max(56, candidateSize.width + 22))
+          let pillWidth = min(cellWidth - 5, max(56, candidateSize.width + 22))
           let pill = NSBezierPath(
             roundedRect: NSRect(x: cellX + 3, y: cellY + 3, width: pillWidth, height: rowHeight - 6),
             xRadius: (rowHeight - 6) / 2,
@@ -833,5 +857,34 @@ private final class AppleCandidateGridView: NSView {
       }
       (candidate as NSString).draw(at: NSPoint(x: candidateX, y: cellY + 5.5), withAttributes: candidateAttributes)
     }
+  }
+
+  private func makeCells(candidates: [String]) -> [CandidateCell] {
+    let font = NSFont(name: "PingFangSC-Regular", size: 14) ?? .systemFont(ofSize: 14, weight: .regular)
+    let attributes: [NSAttributedString.Key: Any] = [.font: font]
+    let columnWidth = Self.preferredSize.width / CGFloat(Self.columnCount)
+    var cells = [CandidateCell]()
+    var row = 0
+    var column = 0
+    var orderInRow = 0
+
+    for (candidateIndex, candidate) in candidates.enumerated() {
+      let width = (candidate as NSString).size(withAttributes: attributes).width + 22
+      let span = min(Self.columnCount, max(1, Int(ceil(width / columnWidth))))
+      if column > 0, column + span > Self.columnCount {
+        row += 1
+        column = 0
+        orderInRow = 0
+      }
+      cells.append(CandidateCell(candidateIndex: candidateIndex, row: row, column: column, span: span, orderInRow: orderInRow))
+      column += span
+      orderInRow += 1
+      if column == Self.columnCount {
+        row += 1
+        column = 0
+        orderInRow = 0
+      }
+    }
+    return cells
   }
 }
