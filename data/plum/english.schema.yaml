@@ -1,0 +1,12 @@
+# Rime schema used only to precompile the bundled English dictionary.
+# It is intentionally absent from default.yaml's schema_list.
+schema:
+  schema_id: english
+  name: English Dictionary Build
+  version: "1.0"
+
+translator:
+  dictionary: english
+  enable_sentence: false
+  enable_completion: true
+  initial_quality: 1.2

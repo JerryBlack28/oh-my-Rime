@@ -317,7 +317,11 @@ final class SquirrelInputController: IMKInputController {
     guard let panel = NSApp.squirrelAppDelegate.panel, panel.isVisible else { return false }
 
     if !panel.appleGridMode {
-      return up ? false : panel.activateAppleGrid()
+      guard !up, panel.activateAppleGrid() else { return false }
+      // Rebuild the expanded grid from Rime's canonical order before any
+      // grid-navigation key is interpreted as an absolute candidate index.
+      rimeUpdate()
+      return true
     }
 
     guard let target = panel.appleGridTarget(up: up) else {
@@ -858,10 +862,16 @@ private extension SquirrelInputController {
               previousCandidates.append(candidate.text.map { String(cString: $0) } ?? "")
               previousComments.append(candidate.comment.map { String(cString: $0) } ?? "")
             }
-            displayedCandidates = previousCandidates + displayedCandidates
-            displayedComments = previousComments + displayedComments
+            let previousRankedIndices = NSApp.squirrelAppDelegate.candidateReranker.rankedIndices(
+              candidates: previousCandidates,
+              input: input,
+              precedingText: precedingText,
+              application: currentApp
+            )
+            displayedCandidates = previousRankedIndices.map { previousCandidates[$0] } + displayedCandidates
+            displayedComments = previousRankedIndices.map { previousComments[$0] } + displayedComments
             displayedAbsoluteIndices =
-              Array(previousPageStart..<(previousPageStart + previousCandidates.count)) +
+              previousRankedIndices.map { previousPageStart + $0 } +
               displayedAbsoluteIndices
             candidateOffset = previousPageStart
             _ = rimeAPI.free_context(&previousContext)
@@ -874,14 +884,22 @@ private extension SquirrelInputController {
         if rimeAPI.highlight_candidate(session, nextPageStart) {
           var nextContext = RimeContext_stdbool.rimeStructInit()
           if rimeAPI.get_context(session, &nextContext) {
+            var nextCandidates = [String]()
+            var nextComments = [String]()
             for i in 0..<Int(nextContext.menu.num_candidates) {
               let candidate = nextContext.menu.candidates[i]
-              displayedCandidates.append(candidate.text.map { String(cString: $0) } ?? "")
-              displayedComments.append(candidate.comment.map { String(cString: $0) } ?? "")
+              nextCandidates.append(candidate.text.map { String(cString: $0) } ?? "")
+              nextComments.append(candidate.comment.map { String(cString: $0) } ?? "")
             }
-            displayedAbsoluteIndices.append(
-              contentsOf: nextPageStart..<(nextPageStart + Int(nextContext.menu.num_candidates))
+            let nextRankedIndices = NSApp.squirrelAppDelegate.candidateReranker.rankedIndices(
+              candidates: nextCandidates,
+              input: input,
+              precedingText: precedingText,
+              application: currentApp
             )
+            displayedCandidates.append(contentsOf: nextRankedIndices.map { nextCandidates[$0] })
+            displayedComments.append(contentsOf: nextRankedIndices.map { nextComments[$0] })
+            displayedAbsoluteIndices.append(contentsOf: nextRankedIndices.map { nextPageStart + $0 })
             displayedLastPage = nextContext.menu.is_last_page
             _ = rimeAPI.free_context(&nextContext)
           }
@@ -932,8 +950,10 @@ private extension SquirrelInputController {
     guard rimeAPI.get_context(session, &ctx) else {
       return input
     }
-    let preedit = ctx.composition.preedit.map { String(cString: $0) } ?? ""
-    return preedit.isEmpty ? input : preedit
+    // `preedit` contains Rime's display-only syllable separators.  Compose
+    // confirmed text with the raw buffer instead so `dnys` stays contiguous.
+    let confirmed = ctx.commit_text_preview.map { String(cString: $0) } ?? ""
+    return confirmed + input
   }
 
   private func showClipboardHistory(client sender: Any!) -> Bool {

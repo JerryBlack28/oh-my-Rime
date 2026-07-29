@@ -14,6 +14,11 @@ rime_shared_data_path="${squirrel_app_root}/Contents/SharedSupport"
 if [ -z "${RIME_NO_PREBUILD}" ]; then
     pushd "${rime_shared_data_path}" > /dev/null
     "${squirrel_executable}" --build
+    "${squirrel_app_root}/Contents/MacOS/rime_deployer" --compile \
+        "${rime_shared_data_path}/english.schema.yaml" \
+        "${rime_shared_data_path}" \
+        "${rime_shared_data_path}" \
+        "${rime_shared_data_path}/build"
     popd > /dev/null
 fi && (
     /usr/bin/sudo -u "${login_user}" "${squirrel_executable}" --enable-input-source
