@@ -13,6 +13,7 @@ final class SquirrelPanel: NSPanel {
   private let back: NSVisualEffectView
   private let appleGrid: AppleCandidateGridView
   var inputController: SquirrelInputController?
+  var clipboardSelectionHandler: ((Int) -> Void)?
 
   var position: NSRect
   private var screenRect: NSRect = .zero
@@ -528,7 +529,11 @@ private extension SquirrelPanel {
     case .leftMouseUp:
       let candidate = appleGrid.candidateIndex(at: point)
       if let candidate, candidate == pressedClipboardCandidate {
-        _ = inputController?.selectClipboardEntry(candidate)
+        if let clipboardSelectionHandler {
+          clipboardSelectionHandler(candidate)
+        } else {
+          _ = inputController?.selectClipboardEntry(candidate)
+        }
       }
       pressedClipboardCandidate = nil
     case .mouseEntered:

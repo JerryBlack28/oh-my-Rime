@@ -345,6 +345,7 @@ final class SquirrelInputController: IMKInputController {
 
   override func activateServer(_ sender: Any!) {
     self.client ?= sender as? IMKTextInput
+    NSApp.squirrelAppDelegate.activeInputController = self
     // print("[DEBUG] activateServer:")
     var keyboardLayout = NSApp.squirrelAppDelegate.config?.getString("keyboard_layout") ?? ""
     if keyboardLayout == "last" || keyboardLayout == "" {
@@ -371,6 +372,9 @@ final class SquirrelInputController: IMKInputController {
     // print("[DEBUG] deactivateServer: \(sender ?? "nil")")
     hidePalettes()
     commitComposition(sender)
+    if NSApp.squirrelAppDelegate.activeInputController === self {
+      NSApp.squirrelAppDelegate.activeInputController = nil
+    }
     client = nil
   }
 
@@ -430,6 +434,10 @@ final class SquirrelInputController: IMKInputController {
   }
 
   @objc private func openClipboardHistory() {
+    _ = showClipboardHistory(client: client)
+  }
+
+  func openClipboardHistoryFromGlobalHotkey() {
     _ = showClipboardHistory(client: client)
   }
 

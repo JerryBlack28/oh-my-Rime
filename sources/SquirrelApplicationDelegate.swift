@@ -7,6 +7,7 @@
 
 import UserNotifications
 import AppKit
+import Carbon
 
 final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
   static let rimeWikiURL = URL(string: "https://github.com/rime/home/wiki")!
@@ -16,11 +17,15 @@ final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
   var config: SquirrelConfig?
   var panel: SquirrelPanel?
   let clipboardHistory = ClipboardHistoryManager()
+  weak var activeInputController: SquirrelInputController?
+  private lazy var globalClipboardHotkey = GlobalClipboardHotkey(delegate: self)
+  private var globalClipboardEntries = [ClipboardHistoryEntry]()
   var enableNotifications = false
 
   func applicationWillFinishLaunching(_ notification: Notification) {
     panel = SquirrelPanel(position: .zero)
     clipboardHistory.start()
+    globalClipboardHotkey.start()
     addObservers()
   }
 
@@ -29,7 +34,51 @@ final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
     NotificationCenter.default.removeObserver(self)
     DistributedNotificationCenter.default().removeObserver(self)
     clipboardHistory.stop()
+    globalClipboardHotkey.stop()
     panel?.hide()
+  }
+
+  func handleGlobalClipboardHotkey(_ action: ClipboardHotkeyAction) {
+    if action == .open {
+      if let activeInputController {
+        activeInputController.openClipboardHistoryFromGlobalHotkey()
+      } else {
+        showGlobalClipboardHistory()
+      }
+      return
+    }
+
+    guard activeInputController == nil,
+          let panel,
+          panel.clipboardMode else {
+      return
+    }
+    switch action {
+    case .escape:
+      closeGlobalClipboardHistory()
+    case .returnKey, .space:
+      if let index = panel.highlightedClipboardCandidate {
+        selectGlobalClipboardEntry(index)
+      }
+    case .left:
+      _ = panel.moveClipboardHorizontally(forward: false)
+    case .right:
+      _ = panel.moveClipboardHorizontally(forward: true)
+    case .up, .minus:
+      _ = panel.moveClipboardVertically(up: true)
+    case .down, .equal:
+      _ = panel.moveClipboardVertically(up: false)
+    case .pageUp:
+      _ = panel.pageClipboard(up: true)
+    case .pageDown:
+      _ = panel.pageClipboard(up: false)
+    default:
+      if let number = action.number,
+         number <= panel.visibleCandidateCount,
+         let index = panel.candidateIndex(forVisibleIndex: number - 1) {
+        selectGlobalClipboardEntry(index)
+      }
+    }
   }
 
   func deploy() {
@@ -192,6 +241,58 @@ final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
     return .terminateNow
   }
 
+}
+
+private extension SquirrelApplicationDelegate {
+  func showGlobalClipboardHistory() {
+    globalClipboardEntries = clipboardHistory.currentEntries()
+    guard !globalClipboardEntries.isEmpty, let panel else {
+      NSSound.beep()
+      return
+    }
+
+    let mouse = NSEvent.mouseLocation
+    panel.position = NSRect(x: mouse.x, y: mouse.y, width: 1, height: 22)
+    panel.inputController = nil
+    panel.clipboardSelectionHandler = { [weak self] index in
+      self?.selectGlobalClipboardEntry(index)
+    }
+    panel.showClipboard(globalClipboardEntries.map(\.displayTitle))
+    globalClipboardHotkey.beginNavigation()
+  }
+
+  func closeGlobalClipboardHistory() {
+    globalClipboardHotkey.endNavigation()
+    globalClipboardEntries.removeAll()
+    panel?.clipboardSelectionHandler = nil
+    panel?.hideClipboard()
+  }
+
+  func selectGlobalClipboardEntry(_ index: Int) {
+    guard index >= 0, index < globalClipboardEntries.count else { return }
+    let entry = globalClipboardEntries[index]
+    guard clipboardHistory.restore(entry) else {
+      NSSound.beep()
+      return
+    }
+    closeGlobalClipboardHistory()
+    postGlobalPasteShortcut()
+  }
+
+  func postGlobalPasteShortcut() {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+      guard let source = CGEventSource(stateID: .hidSystemState),
+            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
+            let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false) else {
+        NSSound.beep()
+        return
+      }
+      keyDown.flags = .maskCommand
+      keyUp.flags = .maskCommand
+      keyDown.post(tap: .cghidEventTap)
+      keyUp.post(tap: .cghidEventTap)
+    }
+  }
 }
 
 private func notificationHandler(contextObject: UnsafeMutableRawPointer?, sessionId: RimeSessionId, messageTypeC: UnsafePointer<CChar>?, messageValueC: UnsafePointer<CChar>?) {
