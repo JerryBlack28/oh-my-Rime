@@ -28,6 +28,7 @@ final class SquirrelInputController: IMKInputController {
   private var chordTimer: Timer?
   private var chordDuration: TimeInterval = 0
   private var currentApp: String = ""
+  private var clipboardEntries = [ClipboardHistoryEntry]()
 
   // swiftlint:disable:next cyclomatic_complexity
   override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
@@ -92,6 +93,19 @@ final class SquirrelInputController: IMKInputController {
       rimeUpdate()
 
     case .keyDown:
+      let shortcutModifiers = modifiers.intersection([.command, .control, .option, .shift])
+      if event.keyCode == UInt16(kVK_ANSI_V), shortcutModifiers == [.control, .shift] {
+        handled = showClipboardHistory(client: sender)
+        break
+      }
+      if NSApp.squirrelAppDelegate.panel?.clipboardMode == true {
+        if let clipboardHandled = handleClipboardKey(event) {
+          handled = clipboardHandled
+          break
+        }
+        closeClipboardHistory()
+      }
+
       // ignore Command+X hotkeys.
       if modifiers.contains(.command) {
         break
@@ -172,6 +186,25 @@ final class SquirrelInputController: IMKInputController {
       rimeUpdate()
     }
     return success
+  }
+
+  func selectClipboardEntry(_ index: Int) -> Bool {
+    guard index >= 0, index < clipboardEntries.count else { return false }
+    let entry = clipboardEntries[index]
+    closeClipboardHistory()
+    switch entry.kind {
+    case .text:
+      guard let text = entry.text else { return false }
+      commit(string: text)
+      return true
+    case .image, .files:
+      guard NSApp.squirrelAppDelegate.clipboardHistory.restore(entry) else {
+        NSSound.beep()
+        return false
+      }
+      postPasteShortcut()
+      return true
+    }
   }
 
   // swiftlint:disable:next identifier_name
@@ -362,6 +395,9 @@ final class SquirrelInputController: IMKInputController {
     deploy.keyEquivalentModifierMask = [.control, .option]
     let sync = NSMenuItem(title: NSLocalizedString("Sync user data", comment: "Menu item"), action: #selector(syncUserData), keyEquivalent: "")
     sync.target = self
+    let clipboard = NSMenuItem(title: "剪贴板历史…", action: #selector(openClipboardHistory), keyEquivalent: "v")
+    clipboard.target = self
+    clipboard.keyEquivalentModifierMask = [.control, .shift]
     let logDir = NSMenuItem(title: NSLocalizedString("Logs...", comment: "Menu item"), action: #selector(openLogFolder), keyEquivalent: "")
     logDir.target = self
     let setting = NSMenuItem(title: NSLocalizedString("Settings...", comment: "Menu item"), action: #selector(openRimeFolder), keyEquivalent: "")
@@ -372,11 +408,16 @@ final class SquirrelInputController: IMKInputController {
     let menu = NSMenu()
     menu.addItem(deploy)
     menu.addItem(sync)
+    menu.addItem(clipboard)
     menu.addItem(logDir)
     menu.addItem(setting)
     menu.addItem(wiki)
 
     return menu
+  }
+
+  @objc private func openClipboardHistory() {
+    _ = showClipboardHistory(client: client)
   }
 
   @objc func deploy() {
@@ -721,6 +762,86 @@ private extension SquirrelInputController {
     client.insertText(string, replacementRange: .empty)
     preedit = ""
     hidePalettes()
+  }
+
+  private func showClipboardHistory(client sender: Any!) -> Bool {
+    self.client ?= sender as? IMKTextInput
+    clipboardEntries = NSApp.squirrelAppDelegate.clipboardHistory.currentEntries()
+    guard !clipboardEntries.isEmpty, let client else {
+      NSSound.beep()
+      return true
+    }
+
+    if session != 0 {
+      rimeAPI.clear_composition(session)
+    }
+    client.setMarkedText("", selectionRange: .empty, replacementRange: .empty)
+    preedit = ""
+
+    var inputPosition = NSRect()
+    client.attributes(forCharacterIndex: 0, lineHeightRectangle: &inputPosition)
+    if let panel = NSApp.squirrelAppDelegate.panel {
+      panel.position = inputPosition
+      panel.inputController = self
+      panel.showClipboard(clipboardEntries.map(\.displayTitle))
+    }
+    return true
+  }
+
+  private func closeClipboardHistory() {
+    clipboardEntries.removeAll()
+    NSApp.squirrelAppDelegate.panel?.hideClipboard()
+  }
+
+  private func handleClipboardKey(_ event: NSEvent) -> Bool? {
+    let modifiers = event.modifierFlags.intersection([.command, .control, .option, .shift])
+    guard modifiers.isEmpty || modifiers == [.capsLock] else { return nil }
+    guard let panel = NSApp.squirrelAppDelegate.panel else { return nil }
+
+    switch Int(event.keyCode) {
+    case kVK_Escape:
+      closeClipboardHistory()
+      return true
+    case kVK_Return, kVK_ANSI_KeypadEnter, kVK_Space:
+      guard let index = panel.highlightedClipboardCandidate else { return true }
+      return selectClipboardEntry(index)
+    case kVK_LeftArrow:
+      return panel.moveClipboardHorizontally(forward: false)
+    case kVK_RightArrow:
+      return panel.moveClipboardHorizontally(forward: true)
+    case kVK_UpArrow, kVK_ANSI_Minus:
+      return panel.moveClipboardVertically(up: true)
+    case kVK_DownArrow, kVK_ANSI_Equal:
+      return panel.moveClipboardVertically(up: false)
+    case kVK_PageUp:
+      return panel.pageClipboard(up: true)
+    case kVK_PageDown:
+      return panel.pageClipboard(up: false)
+    default:
+      if let characters = event.charactersIgnoringModifiers,
+         let number = Int(characters),
+         number >= 1,
+         number <= panel.visibleCandidateCount,
+         let candidate = panel.candidateIndex(forVisibleIndex: number - 1) {
+        return selectClipboardEntry(candidate)
+      }
+      return nil
+    }
+  }
+
+  private func postPasteShortcut() {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+      guard let source = CGEventSource(stateID: .hidSystemState),
+            let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
+            let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false) else {
+        NSSound.beep()
+        return
+      }
+      keyDown.flags = .maskCommand
+      keyUp.flags = .maskCommand
+      keyDown.post(tap: .cghidEventTap)
+      keyUp.post(tap: .cghidEventTap)
+    }
   }
 
   func show(preedit: String, selRange: NSRange, caretPos: Int) {

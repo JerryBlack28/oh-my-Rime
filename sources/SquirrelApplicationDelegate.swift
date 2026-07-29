@@ -15,10 +15,12 @@ final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
   let rimeAPI: RimeApi_stdbool = rime_get_api_stdbool().pointee
   var config: SquirrelConfig?
   var panel: SquirrelPanel?
+  let clipboardHistory = ClipboardHistoryManager()
   var enableNotifications = false
 
   func applicationWillFinishLaunching(_ notification: Notification) {
     panel = SquirrelPanel(position: .zero)
+    clipboardHistory.start()
     addObservers()
   }
 
@@ -26,6 +28,7 @@ final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
     // swiftlint:disable:next notification_center_detachment
     NotificationCenter.default.removeObserver(self)
     DistributedNotificationCenter.default().removeObserver(self)
+    clipboardHistory.stop()
     panel?.hide()
   }
 

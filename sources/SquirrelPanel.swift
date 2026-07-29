@@ -38,6 +38,8 @@ final class SquirrelPanel: NSPanel {
   private var visibleCandidateRange: Range<Int> = 0..<0
   private var appleGridStartRow = 0
   private(set) var appleGridMode = false
+  private(set) var clipboardMode = false
+  private var pressedClipboardCandidate: Int?
   private var lastPresentationWasAppleGrid: Bool?
 
   init(position: NSRect) {
@@ -83,6 +85,11 @@ final class SquirrelPanel: NSPanel {
 
   // swiftlint:disable:next cyclomatic_complexity
   override func sendEvent(_ event: NSEvent) {
+    if clipboardMode {
+      sendClipboardEvent(event)
+      super.sendEvent(event)
+      return
+    }
     switch event.type {
     case .leftMouseDown:
       let (index, _, pagingUp) =  view.click(at: mousePosition())
@@ -171,6 +178,8 @@ final class SquirrelPanel: NSPanel {
     orderOut(nil)
     maxHeight = 0
     appleGridMode = false
+    clipboardMode = false
+    pressedClipboardCandidate = nil
     appleGrid.isHidden = true
     appleGrid.alphaValue = 1
     view.alphaValue = 1
@@ -210,6 +219,64 @@ final class SquirrelPanel: NSPanel {
     appleGrid.isHidden = true
     update(preedit: preedit, selRange: selRange, caretPos: caretPos, candidates: candidates, comments: comments,
            labels: labels, candidateOffset: candidateOffset, highlighted: index, page: page, lastPage: lastPage, update: false)
+  }
+
+  func showClipboard(_ titles: [String]) {
+    guard !titles.isEmpty else { return }
+    preedit = ""
+    selRange = .empty
+    caretPos = 0
+    candidates = titles
+    comments = .init(repeating: "", count: titles.count)
+    labels = []
+    candidateOffset = 0
+    index = 0
+    cursorIndex = 0
+    page = 0
+    lastPage = true
+    appleGridStartRow = 0
+    clipboardMode = true
+    appleGridMode = true
+    updateAppleGrid()
+  }
+
+  func hideClipboard() {
+    guard clipboardMode else { return }
+    hide()
+  }
+
+  func moveClipboardVertically(up: Bool) -> Bool {
+    guard clipboardMode, let target = appleGrid.target(up: up) else { return true }
+    index = target.candidateIndex
+    cursorIndex = index
+    appleGridStartRow = target.visibleStartRow
+    updateAppleGrid()
+    return true
+  }
+
+  func moveClipboardHorizontally(forward: Bool) -> Bool {
+    guard clipboardMode,
+          let target = appleGrid.horizontalTarget(forward: forward) else {
+      return true
+    }
+    index = target.candidateIndex
+    cursorIndex = index
+    appleGridStartRow = target.visibleStartRow
+    updateAppleGrid()
+    return true
+  }
+
+  func pageClipboard(up: Bool) -> Bool {
+    guard clipboardMode, let target = appleGrid.pageTarget(up: up) else { return true }
+    index = target.candidateIndex
+    cursorIndex = index
+    appleGridStartRow = target.visibleStartRow
+    updateAppleGrid()
+    return true
+  }
+
+  var highlightedClipboardCandidate: Int? {
+    clipboardMode ? index : nil
   }
 
   // Main function to add attributes to text output from librime
@@ -448,6 +515,42 @@ final class SquirrelPanel: NSPanel {
 }
 
 private extension SquirrelPanel {
+  func sendClipboardEvent(_ event: NSEvent) {
+    let point = appleGrid.convert(mousePosition(), from: view)
+    switch event.type {
+    case .leftMouseDown:
+      pressedClipboardCandidate = appleGrid.candidateIndex(at: point)
+      if let candidate = pressedClipboardCandidate {
+        index = candidate
+        cursorIndex = candidate
+        updateAppleGrid()
+      }
+    case .leftMouseUp:
+      let candidate = appleGrid.candidateIndex(at: point)
+      if let candidate, candidate == pressedClipboardCandidate {
+        _ = inputController?.selectClipboardEntry(candidate)
+      }
+      pressedClipboardCandidate = nil
+    case .mouseEntered:
+      acceptsMouseMovedEvents = true
+    case .mouseExited:
+      acceptsMouseMovedEvents = false
+      pressedClipboardCandidate = nil
+    case .mouseMoved:
+      if let candidate = appleGrid.candidateIndex(at: point), candidate != index {
+        index = candidate
+        cursorIndex = candidate
+        updateAppleGrid()
+      }
+    case .scrollWheel:
+      if abs(event.scrollingDeltaY) > 1 {
+        _ = pageClipboard(up: event.scrollingDeltaY > 0)
+      }
+    default:
+      break
+    }
+  }
+
   func updateAppleGrid() {
     guard !candidates.isEmpty else {
       appleGridMode = false
@@ -855,6 +958,33 @@ private final class AppleCandidateGridView: NSView {
     guard let lastCell = rowCells.last else { return nil }
     let target = rowCells.first(where: { $0.orderInRow == selected.orderInRow }) ?? lastCell
     return (target.candidateIndex, targetStartRow)
+  }
+
+  func horizontalTarget(forward: Bool) -> (candidateIndex: Int, visibleStartRow: Int)? {
+    let targetIndex = highlightedIndex + (forward ? 1 : -1)
+    guard let target = cells.first(where: { $0.candidateIndex == targetIndex }) else {
+      return nil
+    }
+    var nextStart = visibleStartRow
+    if target.row < nextStart {
+      nextStart = target.row
+    } else if target.row >= nextStart + Self.rowCount {
+      nextStart = target.row - Self.rowCount + 1
+    }
+    return (target.candidateIndex, nextStart)
+  }
+
+  func candidateIndex(at point: NSPoint) -> Int? {
+    let drawingBounds = bounds.insetBy(dx: 0.25, dy: 0.25)
+    guard drawingBounds.contains(point) else { return nil }
+    let rowHeight = drawingBounds.height / CGFloat(Self.rowCount)
+    let columnWidth = drawingBounds.width / CGFloat(Self.columnCount)
+    let visibleRow = min(Self.rowCount - 1, max(0, Int((point.y - drawingBounds.minY) / rowHeight)))
+    let column = min(Self.columnCount - 1, max(0, Int((point.x - drawingBounds.minX) / columnWidth)))
+    let absoluteRow = visibleStartRow + visibleRow
+    return cells.first(where: {
+      $0.row == absoluteRow && column >= $0.column && column < $0.column + $0.span
+    })?.candidateIndex
   }
 
   override func draw(_ dirtyRect: NSRect) {
