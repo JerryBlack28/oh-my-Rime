@@ -149,6 +149,17 @@ final class SquirrelInputController: IMKInputController {
       let pageUpKeys: Set<UInt16> = [UInt16(kVK_PageUp)]
       let pageDownKeys: Set<UInt16> = [UInt16(kVK_PageDown)]
       if hasOnlyCapsLock,
+         [UInt16(kVK_Return), UInt16(kVK_ANSI_KeypadEnter)].contains(keyCode),
+         shouldCommitRawInputOnReturn(existingInput) {
+        // Treat Return as an explicit English-input escape hatch while an
+        // alphabetic Rime composition is active. Space still confirms Chinese.
+        commit(string: existingInput)
+        rimeAPI.clear_composition(session)
+        rimeUpdate()
+        handled = true
+        break
+      }
+      if hasOnlyCapsLock,
          [UInt16(kVK_Return), UInt16(kVK_ANSI_KeypadEnter), UInt16(kVK_Space)].contains(keyCode),
          let panel = NSApp.squirrelAppDelegate.panel,
          panel.isVisible,
@@ -902,6 +913,18 @@ private extension SquirrelInputController {
     client.insertText(string, replacementRange: .empty)
     preedit = ""
     hidePalettes()
+  }
+
+  private func shouldCommitRawInputOnReturn(_ input: String) -> Bool {
+    guard !input.isEmpty else { return false }
+    return input.unicodeScalars.allSatisfy { scalar in
+      switch scalar.value {
+      case 48...57, 65...90, 97...122:
+        return true
+      default:
+        return false
+      }
+    }
   }
 
   private func showClipboardHistory(client sender: Any!) -> Bool {
