@@ -959,8 +959,13 @@ private extension SquirrelInputController {
       closeClipboardHistory()
       return true
     case kVK_Return, kVK_ANSI_KeypadEnter, kVK_Space:
-      guard let index = panel.highlightedClipboardCandidate else { return true }
-      return selectClipboardEntry(index)
+      if let index = panel.highlightedClipboardCandidate {
+        _ = selectClipboardEntry(index)
+      }
+      // A clipboard-selection key must never fall through to the client.
+      // In particular, a failed image restore used to turn Space into a
+      // literal space in the target editor.
+      return true
     case kVK_LeftArrow:
       return panel.moveClipboardHorizontally(forward: false)
     case kVK_RightArrow:
