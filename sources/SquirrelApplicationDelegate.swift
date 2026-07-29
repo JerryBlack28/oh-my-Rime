@@ -7,6 +7,7 @@
 
 import UserNotifications
 import AppKit
+import ApplicationServices
 import Carbon
 
 final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
@@ -21,6 +22,7 @@ final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
   weak var activeInputController: SquirrelInputController?
   private lazy var globalClipboardHotkey = GlobalClipboardHotkey(delegate: self)
   private var globalClipboardEntries = [ClipboardHistoryEntry]()
+  private var globalClipboardTargetPID: pid_t?
   var enableNotifications = false
 
   func applicationWillFinishLaunching(_ notification: Notification) {
@@ -253,6 +255,9 @@ private extension SquirrelApplicationDelegate {
       return
     }
 
+    globalClipboardTargetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+    requestPasteAccessibility()
+
     let mouse = NSEvent.mouseLocation
     panel.position = NSRect(x: mouse.x, y: mouse.y, width: 1, height: 22)
     panel.inputController = nil
@@ -273,16 +278,30 @@ private extension SquirrelApplicationDelegate {
   func selectGlobalClipboardEntry(_ index: Int) {
     guard index >= 0, index < globalClipboardEntries.count else { return }
     let entry = globalClipboardEntries[index]
+    let targetPID = globalClipboardTargetPID
     guard clipboardHistory.restore(entry) else {
       NSSound.beep()
       return
     }
     closeGlobalClipboardHistory()
-    postGlobalPasteShortcut()
+    globalClipboardTargetPID = nil
+    postGlobalPasteShortcut(to: targetPID)
   }
 
-  func postGlobalPasteShortcut() {
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+  func requestPasteAccessibility() {
+    guard !AXIsProcessTrusted() else { return }
+    let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+    _ = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
+  }
+
+  func postGlobalPasteShortcut(to targetPID: pid_t?) {
+    guard AXIsProcessTrusted() else {
+      requestPasteAccessibility()
+      NSSound.beep()
+      return
+    }
+
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
       guard let source = CGEventSource(stateID: .hidSystemState),
             let keyDown = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: true),
             let keyUp = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_V), keyDown: false) else {
@@ -291,8 +310,13 @@ private extension SquirrelApplicationDelegate {
       }
       keyDown.flags = .maskCommand
       keyUp.flags = .maskCommand
-      keyDown.post(tap: .cghidEventTap)
-      keyUp.post(tap: .cghidEventTap)
+      if let targetPID {
+        keyDown.postToPid(targetPID)
+        keyUp.postToPid(targetPID)
+      } else {
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
+      }
     }
   }
 
