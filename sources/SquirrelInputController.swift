@@ -926,8 +926,7 @@ private extension SquirrelInputController {
     preedit = ""
 
     if let panel = NSApp.squirrelAppDelegate.panel {
-      let mouse = NSEvent.mouseLocation
-      panel.position = NSRect(x: mouse.x, y: mouse.y, width: 1, height: 22)
+      panel.position = NSApp.squirrelAppDelegate.clipboardPanelAnchor()
       panel.inputController = self
       panel.showClipboard(clipboardEntries.map(\.displayTitle))
     }

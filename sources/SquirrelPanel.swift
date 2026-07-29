@@ -826,7 +826,9 @@ private extension SquirrelPanel {
       height: min(preferredSize.height, screenRect.height * 0.95)
     )
     var panelRect = NSRect(
-      x: position.minX - 12,
+      x: clipboardMode
+        ? position.midX - panelSize.width / 2
+        : position.minX - 12,
       y: position.minY - SquirrelTheme.offsetHeight - panelSize.height,
       width: panelSize.width,
       height: panelSize.height

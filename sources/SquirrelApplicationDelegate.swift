@@ -109,6 +109,27 @@ final class SquirrelApplicationDelegate: NSObject, NSApplicationDelegate {
     NSWorkspace.shared.open(Self.rimeWikiURL)
   }
 
+  func clipboardPanelAnchor() -> NSRect {
+    let mouse = NSEvent.mouseLocation
+    let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) ??
+      NSScreen.main ??
+      NSScreen.screens.first
+    guard let screen else {
+      return NSRect(x: mouse.x, y: mouse.y, width: 1, height: 22)
+    }
+
+    let menuBarHeight = max(
+      24,
+      screen.frame.maxY - screen.visibleFrame.maxY
+    )
+    return NSRect(
+      x: screen.frame.maxX - 14,
+      y: screen.frame.maxY - menuBarHeight,
+      width: 1,
+      height: menuBarHeight
+    )
+  }
+
   static func showMessage(msgText: String?) {
     let center = UNUserNotificationCenter.current()
     center.requestAuthorization(options: [.alert, .provisional]) { _, error in
@@ -258,8 +279,7 @@ private extension SquirrelApplicationDelegate {
     globalClipboardTargetPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
     requestPasteAccessibility()
 
-    let mouse = NSEvent.mouseLocation
-    panel.position = NSRect(x: mouse.x, y: mouse.y, width: 1, height: 22)
+    panel.position = clipboardPanelAnchor()
     panel.inputController = nil
     panel.clipboardSelectionHandler = { [weak self] index in
       self?.selectGlobalClipboardEntry(index)
@@ -319,7 +339,6 @@ private extension SquirrelApplicationDelegate {
       }
     }
   }
-
 }
 
 private func notificationHandler(contextObject: UnsafeMutableRawPointer?, sessionId: RimeSessionId, messageTypeC: UnsafePointer<CChar>?, messageValueC: UnsafePointer<CChar>?) {
@@ -365,6 +384,7 @@ private func notificationHandler(contextObject: UnsafeMutableRawPointer?, sessio
       }
     }
   }
+
 }
 
 private extension SquirrelApplicationDelegate {
