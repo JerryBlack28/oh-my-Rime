@@ -55,6 +55,15 @@ final class SquirrelInputController: IMKInputController {
       updateAppOptions()
     }
 
+    // Once the clipboard palette is open, releasing Control/Shift must not be
+    // forwarded to Rime. Its normal no-composition update would hide the
+    // palette immediately after the shortcut keys are released.
+    if event.type == .flagsChanged,
+       NSApp.squirrelAppDelegate.panel?.clipboardMode == true {
+      lastModifiers = modifiers
+      return true
+    }
+
     switch event.type {
     case .flagsChanged:
       if lastModifiers == modifiers {
