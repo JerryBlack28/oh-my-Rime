@@ -37,6 +37,7 @@ final class SquirrelPanel: NSPanel {
   private var visibleCandidateRange: Range<Int> = 0..<0
   private var appleGridStartCandidate: Int = 0
   private(set) var appleGridMode = false
+  private var lastPresentationWasAppleGrid: Bool?
 
   init(position: NSRect) {
     self.position = position
@@ -166,6 +167,7 @@ final class SquirrelPanel: NSPanel {
     maxHeight = 0
     appleGridMode = false
     appleGrid.isHidden = true
+    lastPresentationWasAppleGrid = nil
   }
 
   func activateAppleGrid() -> Bool {
@@ -615,7 +617,7 @@ private extension SquirrelPanel {
       panelRect.size = NSSize(width: min(0.95 * screenRect.width, preferredWidth),
                               height: min(0.95 * screenRect.height, contentRect.height + theme.edgeInset.height * 2))
       panelRect.origin = NSPoint(
-        x: position.minX - theme.pagingOffset * 0.6,
+        x: position.minX - 12,
         y: position.minY - SquirrelTheme.offsetHeight - panelRect.height
       )
     }
@@ -638,7 +640,7 @@ private extension SquirrelPanel {
     if panelRect.minY < screenRect.minY {
       panelRect.origin.y = screenRect.minY
     }
-    self.setFrame(panelRect, display: true)
+    setPanelFrame(panelRect, appleGrid: false)
 
     // rotate the view, the core in vertical mode!
     if vertical {
@@ -695,7 +697,7 @@ private extension SquirrelPanel {
       panelRect.origin.y = screenRect.maxY - panelRect.height
     }
 
-    setFrame(panelRect, display: true)
+    setPanelFrame(panelRect, appleGrid: true)
     contentView!.boundsRotation = 0
     contentView!.setBoundsOrigin(.zero)
     view.isHidden = true
@@ -707,6 +709,12 @@ private extension SquirrelPanel {
     alphaValue = 1
     invalidateShadow()
     orderFront(nil)
+  }
+
+  func setPanelFrame(_ frame: NSRect, appleGrid: Bool) {
+    let isTransition = isVisible && lastPresentationWasAppleGrid != appleGrid
+    setFrame(frame, display: true, animate: isTransition)
+    lastPresentationWasAppleGrid = appleGrid
   }
 
   func show(status message: String) {
@@ -759,7 +767,7 @@ private final class AppleCandidateGridView: NSView {
     let background = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
     NSColor(calibratedWhite: 0.975, alpha: 0.99).setFill()
     background.fill()
-    NSColor(calibratedWhite: 0.7, alpha: 0.95).setStroke()
+    NSColor(calibratedWhite: 0.76, alpha: 0.82).setStroke()
     background.lineWidth = 1
     background.stroke()
 

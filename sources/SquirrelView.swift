@@ -252,8 +252,8 @@ final class SquirrelView: NSView {
     }
     if theme.borderLineWidth > 0, let color = theme.borderColor {
       let borderLayer = shapeFromPath(path: backgroundPath)
-      borderLayer.lineWidth = theme.borderLineWidth * 2
-      borderLayer.strokeColor = color.cgColor
+      borderLayer.lineWidth = max(0.5, theme.borderLineWidth)
+      borderLayer.strokeColor = color.withAlphaComponent(0.65).cgColor
       borderLayer.fillColor = nil
       panelLayer.addSublayer(borderLayer)
     }
