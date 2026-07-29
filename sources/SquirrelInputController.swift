@@ -257,6 +257,11 @@ final class SquirrelInputController: IMKInputController {
       return up ? page(up: true) : panel.activateAppleGrid()
     }
 
+    if up, panel.appleGridHighlightIsOnFirstRow {
+      panel.deactivateAppleGrid()
+      return true
+    }
+
     guard let target = panel.appleGridPageTarget(up: up) else {
       // Consume the key at the first/last grid page instead of passing it to
       // librime and unexpectedly changing its backing page.

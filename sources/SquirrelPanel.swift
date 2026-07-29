@@ -200,6 +200,10 @@ final class SquirrelPanel: NSPanel {
     return target.candidateIndex
   }
 
+  var appleGridHighlightIsOnFirstRow: Bool {
+    appleGrid.highlightedRow == 0
+  }
+
   func deactivateAppleGrid() {
     guard appleGridMode else { return }
     appleGridMode = false
@@ -782,6 +786,9 @@ private final class AppleCandidateGridView: NSView {
   private var cells = [CandidateCell]()
   private(set) var visibleStartRow = 0
   private(set) var activeCandidateRange: Range<Int> = 0..<0
+  var highlightedRow: Int? {
+    cells.first(where: { $0.candidateIndex == highlightedIndex })?.row
+  }
 
   override var isFlipped: Bool { true }
 
@@ -830,12 +837,20 @@ private final class AppleCandidateGridView: NSView {
     }
 
     let pageRowCount = Self.rowCount
-    let targetStartRow = visibleStartRow + (up ? -pageRowCount : pageRowCount)
-    guard targetStartRow >= 0, targetStartRow <= finalRow else { return nil }
-
-    let selectedRowOffset = max(0, min(pageRowCount - 1, selected.row - visibleStartRow))
-    let targetLastRow = min(finalRow, targetStartRow + pageRowCount - 1)
-    let targetRow = min(targetStartRow + selectedRowOffset, targetLastRow)
+    let targetStartRow: Int
+    let targetRow: Int
+    if up, visibleStartRow < pageRowCount {
+      // Fewer than five rows precede the current window. Treat them as a
+      // partial page and land on its first row while preserving the column.
+      targetStartRow = 0
+      targetRow = 0
+    } else {
+      targetStartRow = visibleStartRow + (up ? -pageRowCount : pageRowCount)
+      guard targetStartRow >= 0, targetStartRow <= finalRow else { return nil }
+      let selectedRowOffset = max(0, min(pageRowCount - 1, selected.row - visibleStartRow))
+      let targetLastRow = min(finalRow, targetStartRow + pageRowCount - 1)
+      targetRow = min(targetStartRow + selectedRowOffset, targetLastRow)
+    }
     let rowCells = cells.filter { $0.row == targetRow }
     guard let lastCell = rowCells.last else { return nil }
     let target = rowCells.first(where: { $0.orderInRow == selected.orderInRow }) ?? lastCell
