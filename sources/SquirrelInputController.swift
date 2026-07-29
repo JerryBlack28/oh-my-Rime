@@ -114,6 +114,12 @@ final class SquirrelInputController: IMKInputController {
       let appleGridDownKeys: Set<UInt16> = [UInt16(kVK_ANSI_Equal)]
       let pageUpKeys: Set<UInt16> = [UInt16(kVK_UpArrow), UInt16(kVK_PageUp)]
       let pageDownKeys: Set<UInt16> = [UInt16(kVK_DownArrow), UInt16(kVK_PageDown)]
+      if hasOnlyCapsLock, keyCode == UInt16(kVK_RightArrow) {
+        handled = moveRightIntoAppleGrid()
+        if handled {
+          break
+        }
+      }
       if hasOnlyCapsLock, appleGridUpKeys.contains(keyCode) || appleGridDownKeys.contains(keyCode) {
         handled = appleGridPage(up: appleGridUpKeys.contains(keyCode))
         if handled {
@@ -225,6 +231,20 @@ final class SquirrelInputController: IMKInputController {
     }
     let handled = rimeAPI.highlight_candidate(session, panel.absoluteCandidateIndex(forLocalIndex: target))
     if handled {
+      rimeUpdate()
+    }
+    return handled
+  }
+
+  private func moveRightIntoAppleGrid() -> Bool {
+    guard let panel = NSApp.squirrelAppDelegate.panel,
+          panel.isVisible,
+          let target = panel.nextCandidateAfterVisibleEnd() else {
+      return false
+    }
+    let handled = rimeAPI.highlight_candidate(session, panel.absoluteCandidateIndex(forLocalIndex: target))
+    if handled {
+      panel.prepareAppleGridForKeyboardNavigation()
       rimeUpdate()
     }
     return handled

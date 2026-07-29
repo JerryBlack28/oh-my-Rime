@@ -810,22 +810,22 @@ private extension SquirrelView {
       height: bounds.height
     )
     let separatorX = controlRect.minX
-    let separatorInset = max(8, bounds.height * 0.16)
+    let separatorInset: CGFloat = 4.5
     let separatorPath = CGMutablePath()
     separatorPath.move(to: CGPoint(x: separatorX, y: bounds.minY + separatorInset))
     separatorPath.addLine(to: CGPoint(x: separatorX, y: bounds.maxY - separatorInset))
     let separatorLayer = shapeFromPath(path: separatorPath)
     separatorLayer.fillColor = nil
-    separatorLayer.strokeColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
-    separatorLayer.lineWidth = 0.75
+    separatorLayer.strokeColor = NSColor(calibratedWhite: 0.86, alpha: 0.34).cgColor
+    separatorLayer.lineWidth = 0.5
     layer.addSublayer(separatorLayer)
 
     func chevronPath(center: CGPoint, pointsDown: Bool) -> CGPath {
       let direction: CGFloat = pointsDown ? 1 : -1
       let path = CGMutablePath()
-      path.move(to: CGPoint(x: center.x - 4.25, y: center.y - 2.5 * direction))
-      path.addLine(to: CGPoint(x: center.x, y: center.y + 2.5 * direction))
-      path.addLine(to: CGPoint(x: center.x + 4.25, y: center.y - 2.5 * direction))
+      path.move(to: CGPoint(x: center.x - 4, y: center.y - 2 * direction))
+      path.addLine(to: CGPoint(x: center.x, y: center.y + 2 * direction))
+      path.addLine(to: CGPoint(x: center.x + 4, y: center.y - 2 * direction))
       return path
     }
 
@@ -833,7 +833,7 @@ private extension SquirrelView {
       let chevronLayer = shapeFromPath(path: path)
       chevronLayer.fillColor = nil
       chevronLayer.strokeColor = NSColor.tertiaryLabelColor.cgColor
-      chevronLayer.lineWidth = 1.75
+      chevronLayer.lineWidth = 1.5
       chevronLayer.lineCap = .round
       chevronLayer.lineJoin = .round
       layer.addSublayer(chevronLayer)
@@ -841,7 +841,7 @@ private extension SquirrelView {
 
     var downPath: CGPath?
     var upPath: CGPath?
-    let centerX = controlRect.midX
+    let centerX = controlRect.midX - 0.25
     if canPageUp && canPageDown {
       let upChevron = chevronPath(
         center: CGPoint(x: centerX, y: controlRect.midY - 7),

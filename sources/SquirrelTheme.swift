@@ -186,7 +186,7 @@ final class SquirrelTheme {
   }
   var pagingOffset: CGFloat {
     if showPaging {
-      (fontSize ?? Self.defaultFontSize) * 1.75
+      (fontSize ?? Self.defaultFontSize) * 1.85
     } else {
       0
     }

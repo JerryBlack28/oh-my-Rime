@@ -372,6 +372,21 @@ final class SquirrelPanel: NSPanel {
     candidateOffset + index
   }
 
+  func nextCandidateAfterVisibleEnd() -> Int? {
+    guard !appleGridMode,
+          !visibleCandidateRange.isEmpty,
+          index == visibleCandidateRange.upperBound - 1,
+          index + 1 < candidates.count else {
+      return nil
+    }
+    return index + 1
+  }
+
+  func prepareAppleGridForKeyboardNavigation() {
+    appleGridMode = true
+    appleGridStartRow = 0
+  }
+
   func localPageTarget(up: Bool) -> Int? {
     let ranges = candidatePageRanges(candidates: candidates, comments: comments, labels: labels)
     guard let current = ranges.firstIndex(of: visibleCandidateRange) else { return nil }
